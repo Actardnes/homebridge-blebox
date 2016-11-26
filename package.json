@@ -1,9 +1,19 @@
 {
   "name": "homebridge-blebox",
-  "version": "0.0.1",
+  "version": "0.0.7",
   "description": "BleBox plugin for homebridge: https://github.com/nfarina/homebridge",
+  "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Actardnes/homebridge-blebox.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Actardnes/homebridge-blebox/issues"
+  },
   "keywords": [
-    "homebridge-plugin"
+    "homebridge-plugin",
+    "blebox",
+    "homekit"
   ],
   "engines": {
     "node": ">=0.12.0",

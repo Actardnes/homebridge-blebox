@@ -101,6 +101,12 @@ WLightBoxAccessoryWrapper.prototype.checkSpecificState = function () {
     });
 };
 
+WLightBoxAccessoryWrapper.prototype.onDeviceNameChange = function () {
+    this.accessory.getService(this.lightBulbService)
+        .updateCharacteristic(this.nameCharacteristic, this.deviceName);
+};
+
+
 WLightBoxAccessoryWrapper.prototype.sendSetSimpleRgbStateCommand = function (callback, errorMsg) {
     var newValue = colorHelper.rgbToHex(colorHelper.hsvToRgb(this.desiredHSVColor)).substring(1, 7) + colorHelper.toHex(this.desiredWhite / 100 * 255);
     var self = this;

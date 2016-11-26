@@ -1,14 +1,14 @@
 var os = require('os');
-var communication = require("./common/communication");
-var bleboxCommands = require("./common/bleboxCommands");
-var BLEBOX_TYPE = require("./common/bleboxConst").BLEBOX_TYPE;
-var GateBoxAccessoryWrapper = require("./blebox/gateBox");
-var DimmerBoxAccessoryWrapper = require("./blebox/dimmerBox");
-var ShutterBoxAccessoryWrapper = require("./blebox/shutterBox");
-var SwitchBoxAccessoryWrapper = require("./blebox/switchBox");
-var SwitchBoxDAccessoryWrapper = require("./blebox/switchBoxD");
-var WLightBoxAccessoryWrapper = require("./blebox/wLightBox");
-var WLightBoxSAccessoryWrapper = require("./blebox/wLightBoxS");
+var communication = require("./../common/communication");
+var bleboxCommands = require("./../common/bleboxCommands");
+var BLEBOX_TYPE = require("./../common/bleboxConst").BLEBOX_TYPE;
+var GateBoxAccessoryWrapper = require("./../blebox/gateBox");
+var DimmerBoxAccessoryWrapper = require("./../blebox/dimmerBox");
+var ShutterBoxAccessoryWrapper = require("./../blebox/shutterBox");
+var SwitchBoxAccessoryWrapper = require("./../blebox/switchBox");
+var SwitchBoxDAccessoryWrapper = require("./../blebox/switchBoxD");
+var WLightBoxAccessoryWrapper = require("./../blebox/wLightBox");
+var WLightBoxSAccessoryWrapper = require("./../blebox/wLightBoxS");
 
 module.exports = BleBoxPlatform;
 

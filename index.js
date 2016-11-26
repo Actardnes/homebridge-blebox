@@ -9,7 +9,7 @@
 // ],
 //
 
-var BleBoxPlatform = require("./bleboxPlatform");
+var BleBoxPlatform = require("./platform/bleboxPlatform");
 
 module.exports = function (homebridge) {
     //dynamic platform

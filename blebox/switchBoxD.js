@@ -95,10 +95,10 @@ SwitchBoxDAccessoryWrapper.prototype.updateCharacteristics = function () {
 
 SwitchBoxDAccessoryWrapper.prototype.onDeviceNameChange = function () {
     this.accessory.getServiceByUUIDAndSubType(this.switchService, this.firstServiceSubtype)
-        .updateCharacteristic(this.getServiceName(0));
+        .updateCharacteristic(this.nameCharacteristic, this.getServiceName(0));
 
     this.accessory.getServiceByUUIDAndSubType(this.switchService, this.secondServiceSubtype)
-        .updateCharacteristic(this.getServiceName(1));
+        .updateCharacteristic(this.nameCharacteristic, this.getServiceName(1));
 };
 
 SwitchBoxDAccessoryWrapper.prototype.getServiceName = function (relayNumber) {

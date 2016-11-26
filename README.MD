@@ -38,7 +38,7 @@ Configuration sample (remove comments) :
             {
             "platform": "BleBoxPlatform", // Don't change this
             "name": "SomePlatformName" // Custom platform name
-            "NEXT_SCAN_DELAY_IN_MIN" : 0 (Optional, default: 0) // How often platfrom should scan network for blebox devices( 0 - only once at startup, Other value - number of minutes beetween scaning) 
+            "NEXT_SCAN_DELAY_IN_MIN" : 0 // (Optional, default: 0) How often platfrom should scan network for blebox devices( 0 - only once at startup, Other value - number of minutes beetween scaning) 
         }
 
     ],

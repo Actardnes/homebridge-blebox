@@ -1,0 +1,21 @@
+{
+  "bridge": {
+    "name": "SomeBridgeName",
+    "username": "08:D4:0C:B5:DE:71",
+    "port": 51826,
+    "pin": "131-45-155"
+  },
+
+  "description": "Custom description",
+
+  "platforms": [
+    {
+      "platform": "BleBoxPlatform",
+      "name": "SomePlatformName",
+      "NEXT_SCAN_DELAY_IN_MIN" : 0
+    }
+
+  ],
+
+  "accessories": []
+}
