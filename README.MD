@@ -22,7 +22,7 @@ Update your configuration file as bellow.
 ---------- 
 By default configuration file **config.json** is in *{HOME_PATH}/.homebridge* folder. If this file and folder doesn't exists create them.
 
-Configuration sample:
+Configuration sample (remove comments) :
 ```json
 {
     "bridge": {
