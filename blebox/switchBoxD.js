@@ -107,7 +107,7 @@ SwitchBoxDAccessoryWrapper.prototype.getServiceName = function (relayNumber) {
 
 SwitchBoxDAccessoryWrapper.prototype.getCurrentRelayValue = function (relayNumber) {
     var result = false;
-    if (this.relay && this.relays.length > relayNumber) {
+    if (this.relays && this.relays.length > relayNumber) {
         result = this.relays[relayNumber].state ? true : false
     }
     return result;
