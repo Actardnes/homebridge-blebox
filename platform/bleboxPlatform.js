@@ -175,7 +175,7 @@ BleBoxPlatform.prototype.checkSpecificStateAndAddAccessory = function (deviceInf
     var accessoryWrapper = null;
     var ipAddress = deviceInfo.ip;
     var self = this;
-    switch (deviceInfo.type.toLowerCase()) {
+    switch (typeof deviceInfo.type === 'string' && deviceInfo.type.toLowerCase()) {
         case BLEBOX_TYPE.WLIGHTBOXS:
             communication.send(bleboxCommands.getLightState, ipAddress, {
                 onSuccess: function (lightInfo) {
