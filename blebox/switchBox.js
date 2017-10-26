@@ -82,7 +82,7 @@ SwitchBoxAccessoryWrapper.prototype.onDeviceNameChange = function () {
 SwitchBoxAccessoryWrapper.prototype.getCurrentRelayValue = function () {
     var result = false;
     if (this.relay && this.relay.length > 0) {
-        result = this.relay[0].state ? true : false
+        result = !!this.relay[0].state
     }
     return result;
 };

@@ -162,13 +162,13 @@ SwitchBoxDAccessoryWrapper.prototype.setOnState = function (relayNumber, turnOn,
 };
 
 SwitchBoxDAccessoryWrapper.prototype.getName = function (relayNumber, callback) {
-    this.log("( %s ): Getting 'name' characteristic ...", this.deviceName);
+    this.log("SWITCHBOXD( %s ): Getting 'name' characteristic ...", this.deviceName);
     if (this.isResponding() && this.deviceName) {
         var currentName = this.getServiceName(relayNumber);
-        this.log("( %s ): Current 'name' characteristic is %s", this.deviceName, currentName);
+        this.log("SWITCHBOXD( %s ): Current 'name' characteristic is %s", this.deviceName, currentName);
         callback(null, currentName);
     } else {
-        this.log("( %s ): Error getting 'name' characteristic. Name: %s", this.deviceName, this.deviceName);
+        this.log("SWITCHBOXD( %s ): Error getting 'name' characteristic. Name: %s", this.deviceName, this.deviceName);
         callback(new Error("Error getting 'name'."));
     }
 };
