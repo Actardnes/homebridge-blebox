@@ -102,13 +102,28 @@ SwitchBoxDAccessoryWrapper.prototype.onDeviceNameChange = function () {
 };
 
 SwitchBoxDAccessoryWrapper.prototype.getServiceName = function (relayNumber) {
-    return (this.deviceName + " " + (this.relays && this.relays.length > relayNumber && this.relays[relayNumber].name ? this.relays[relayNumber].name : this.firstServiceSubtype));
+    var name_postfix = "";
+    if (this.relays && this.relays.length > relayNumber && this.relays[relayNumber].name) {
+        name_postfix = this.relays[relayNumber].name;
+    } else {
+        switch (relayNumber) {
+            case 0:
+                name_postfix = this.firstServiceSubtype;
+                break;
+            case 1:
+            default:
+                name_postfix = this.secondServiceSubtype;
+                break;
+        }
+    }
+
+    return this.deviceName + " " + name_postfix;
 };
 
 SwitchBoxDAccessoryWrapper.prototype.getCurrentRelayValue = function (relayNumber) {
     var result = false;
     if (this.relays && this.relays.length > relayNumber) {
-        result = this.relays[relayNumber].state ? true : false
+        result = !!this.relays[relayNumber].state
     }
     return result;
 };
