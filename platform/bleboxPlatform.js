@@ -9,6 +9,7 @@ var SwitchBoxAccessoryWrapperFactory = require("./../blebox/switchBox");
 var SwitchBoxDAccessoryWrapperFactory = require("./../blebox/switchBoxD");
 var WLightBoxAccessoryWrapperFactory = require("./../blebox/wLightBox");
 var WLightBoxSAccessoryWrapperFactory = require("./../blebox/wLightBoxS");
+var SmartWindowBoxAccessoryWrapperFactory = require("./../blebox/smartWindowBox");
 
 module.exports = BleBoxPlatform;
 
@@ -116,6 +117,9 @@ BleBoxPlatform.prototype.configureAccessory = function (accessory) {
         case BLEBOX_TYPE.SWITCHBOX:
             accessoryWrapperFactory = SwitchBoxAccessoryWrapperFactory;
             break;
+        case BLEBOX_TYPE.SMARTWINDOWBOX:
+            accessoryWrapperFactory = SmartWindowBoxAccessoryWrapperFactory;
+            break;
         default :
             console.log("Wrong accessory!", accessory);
             this.api.unregisterPlatformAccessories("homebridge-blebox", "BleBoxPlatform", [accessory]);
@@ -123,7 +127,6 @@ BleBoxPlatform.prototype.configureAccessory = function (accessory) {
     }
 
     accessoryWrapper = accessoryWrapperFactory.restore(accessory, this.log, this.api, accessory.context.blebox);
-
     this.addAccessoryWrapper(accessoryWrapper, false);
 };
 
@@ -232,6 +235,13 @@ BleBoxPlatform.prototype.checkSpecificStateAndAddAccessory = function (deviceInf
             communication.send(bleboxCommands.getRelayState, ipAddress, {
                 onSuccess: function (relayInfo) {
                     self.createAndAddAccessoryWrapper(SwitchBoxAccessoryWrapperFactory, deviceInfo, relayInfo);
+                }
+            });
+            break;
+        case BLEBOX_TYPE.SMARTWINDOWBOX:
+            communication.send(bleboxCommands.getWindowState, ipAddress, {
+                onSuccess: function (windowInfo) {
+                    self.createAndAddAccessoryWrapper(SmartWindowBoxAccessoryWrapperFactory, deviceInfo, windowInfo);
                 }
             });
             break;

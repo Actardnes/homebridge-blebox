@@ -7,6 +7,6 @@ module.exports= {
         DIMMERBOX : "dimmerbox",
         WLIGHTBOX : "wlightbox",
         WLIGHTBOXS : "wlightboxs",
-        SMARTWINDOWBOX : "smartWindowBox"
+        SMARTWINDOWBOX : "smartwindowbox"
     }
 };

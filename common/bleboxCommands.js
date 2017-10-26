@@ -53,21 +53,35 @@ module.exports = {
         "name": "setSimpleShutterState",
         "method": "GET",
         "url": "/s/{0}"
-    }, "getDimmerState": {
+    },
+    "getDimmerState": {
         "name": "getDimmerState",
         "method": "GET",
         "url": "/api/dimmer/state"
-    }, "setSimpleDimmerState": {
+    },
+    "setSimpleDimmerState": {
         "name": "setSimpleDimmerState",
         "method": "GET",
         "url": "/s/{0}"
-    }, "getLightState": {
+    },
+    "getLightState": {
         "name": "getLightState",
         "method": "GET",
         "url": "/api/light/state"
-    }, "setSimpleLightState": {
+    },
+    "setSimpleLightState": {
         "name": "setSimpleLightState",
         "method": "GET",
         "url": "/s/{0}"
+    },
+    "getWindowState": {
+        "name": "getWindowState",
+        "method": "GET",
+        "url": "/api/window/state"
+    },
+    "setWindowPositionPercentage": {
+        "name": "setWindowPositionPercentage",
+        "method": "GET",
+        "url": "/s/{0}/p/{1}"
     }
 };
