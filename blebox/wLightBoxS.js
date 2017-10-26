@@ -76,7 +76,7 @@ WLightBoxSAccessoryWrapper.prototype.checkSpecificState = function () {
 WLightBoxSAccessoryWrapper.prototype.updateCharacteristics = function () {
     if (this.light && this.light.desiredColor) {
         var currentBrightness = Number((parseInt(this.light.desiredColor, 16) / 255 * 100).toFixed(0)) || 0;
-        var currentOnValue = currentBrightness != 0;
+        var currentOnValue = currentBrightness !== 0;
 
         this.accessory.getService(this.lightBulbService)
             .updateCharacteristic(this.onCharacteristic, currentOnValue);
@@ -124,9 +124,15 @@ WLightBoxSAccessoryWrapper.prototype.getOnState = function (callback) {
 };
 
 WLightBoxSAccessoryWrapper.prototype.setOnState = function (turnOn, callback) {
-    this.log("WLIGHTBOXS: Setting 'On white' characteristic to %s ...", turnOn);
-    var newValue = colorHelper.toHex((turnOn ? 255 : 0));
-    this.sendSetSimpleLightStateCommand(newValue, callback, "Error setting 'On'.");
+    // Turning on option is handled by @setBrightness
+    if (!turnOn) {
+        this.log("WLIGHTBOXS: Setting 'On white' characteristic to %s ...", turnOn);
+        var newValue = colorHelper.toHex(0);
+        this.sendSetSimpleLightStateCommand(newValue, callback, "Error setting 'On'.");
+    } else {
+        callback(null); // success
+    }
+
 };
 
 WLightBoxSAccessoryWrapper.prototype.getBrightness = function (callback) {

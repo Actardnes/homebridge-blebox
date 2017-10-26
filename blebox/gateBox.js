@@ -93,7 +93,7 @@ GateBoxAccessoryWrapper.prototype.getCurrentDoorStateValue = function () {
     var state = this.currentDoorStateCharacteristic.OPEN; //default value
     if (this.gateInfo) {
         var currentPosition = Number(this.gateInfo.currentPos) || 0;
-        if (currentPosition == 0) {
+        if (currentPosition === 0) {
             state = this.currentDoorStateCharacteristic.CLOSED;
         }
     }

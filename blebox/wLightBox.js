@@ -133,7 +133,7 @@ WLightBoxAccessoryWrapper.prototype.setDesiredColorsAndUpdateCharacteristics = f
         this.desiredWhite = Number((parseInt(this.rgbw.desiredColor.substring(6, 8), 16) / 255 * 100).toFixed(0));
 
         //update characteristics
-        var isRgbOn = this.desiredHSVColor.v != 0;
+        var isRgbOn = this.desiredHSVColor.v !== 0;
         this.accessory.getServiceByUUIDAndSubType(this.lightBulbService, this.rgbServiceSubtype)
             .updateCharacteristic(this.onCharacteristic, isRgbOn);
 
@@ -146,7 +146,7 @@ WLightBoxAccessoryWrapper.prototype.setDesiredColorsAndUpdateCharacteristics = f
         this.accessory.getServiceByUUIDAndSubType(this.lightBulbService, this.rgbServiceSubtype)
             .updateCharacteristic(this.brightnessCharacteristic, this.desiredHSVColor.v);
 
-        var isWhiteOn = this.desiredWhite != 0;
+        var isWhiteOn = this.desiredWhite !== 0;
         this.accessory.getServiceByUUIDAndSubType(this.lightBulbService, this.whiteServiceSubtype)
             .updateCharacteristic(this.onCharacteristic, isWhiteOn);
 
@@ -158,7 +158,7 @@ WLightBoxAccessoryWrapper.prototype.setDesiredColorsAndUpdateCharacteristics = f
 WLightBoxAccessoryWrapper.prototype.getRgbOnState = function (callback) {
     this.log("WLIGHTBOX ( %s ): Getting 'On' characteristic ...", this.deviceName);
     if (this.isResponding() && this.desiredHSVColor) {
-        var currentOnValue = this.desiredHSVColor.v != 0;
+        var currentOnValue = this.desiredHSVColor.v !== 0;
         this.log("WLIGHTBOX ( %s ): Current 'On' characteristic is %s", this.deviceName, currentOnValue);
         callback(null, currentOnValue);
     } else {
@@ -168,17 +168,16 @@ WLightBoxAccessoryWrapper.prototype.getRgbOnState = function (callback) {
 };
 
 WLightBoxAccessoryWrapper.prototype.setRgbOnState = function (turnOn, callback) {
-    this.log("WLIGHTBOX ( %s ): Setting 'On' characteristic to %s ...", this.deviceIp, turnOn);
-    if(turnOn){
-        this.desiredHSVColor.h = 0;
-        this.desiredHSVColor.s = 0;
-        this.desiredHSVColor.v = 100;
-    }else{
+    if (!turnOn) {
+        this.log("WLIGHTBOX ( %s ): Setting 'On' characteristic to %s ...", this.deviceName, turnOn);
         this.desiredHSVColor.h = 0;
         this.desiredHSVColor.s = 0;
         this.desiredHSVColor.v = 0;
+        this.sendSetSimpleRgbStateCommand(callback, "Error setting 'On'.");
+    } else {
+        callback(null)
     }
-    this.sendSetSimpleRgbStateCommand(callback, "Error setting 'On'.");
+
 };
 
 WLightBoxAccessoryWrapper.prototype.getRgbBrightness = function (callback) {
@@ -210,8 +209,9 @@ WLightBoxAccessoryWrapper.prototype.getRgbHue = function (callback) {
 };
 
 WLightBoxAccessoryWrapper.prototype.setRgbHue = function (hue, callback) {
-    this.log("WLIGHTBOX ( %s ): Setting 'Hue' characteristic to %s ...", this.deviceIp, hue);
+    this.log("WLIGHTBOX ( %s ): Setting 'Hue' characteristic to %s ...", this.deviceName, hue);
     this.desiredHSVColor.h = hue;
+    this.desiredHSVColor.v = this.desiredHSVColor.v || 100;
     this.sendSetSimpleRgbStateCommand(callback, "Error setting 'Hue'.");
 };
 
@@ -229,13 +229,14 @@ WLightBoxAccessoryWrapper.prototype.getRgbSaturation = function (callback) {
 WLightBoxAccessoryWrapper.prototype.setRgbSaturation = function (saturation, callback) {
     this.log("WLIGHTBOX ( %s ): Setting 'Saturation' characteristic to %s ...", this.deviceName, saturation);
     this.desiredHSVColor.s = saturation;
+    this.desiredHSVColor.v = this.desiredHSVColor.v || 100;
     this.sendSetSimpleRgbStateCommand(callback, "Error setting 'Saturation'.");
 };
 
 WLightBoxAccessoryWrapper.prototype.getWhiteOnState = function (callback) {
     this.log("WLIGHTBOX ( %s ): Getting 'On white' characteristic ...", this.deviceName);
     if (this.isResponding()) {
-        var isOn = this.desiredWhite != 0;
+        var isOn = this.desiredWhite !== 0;
         this.log("WLIGHTBOX ( %s ): Current 'On white' characteristic is %s", this.deviceName, isOn);
         callback(null, isOn);
     } else {
@@ -245,9 +246,14 @@ WLightBoxAccessoryWrapper.prototype.getWhiteOnState = function (callback) {
 };
 
 WLightBoxAccessoryWrapper.prototype.setWhiteOnState = function (turnOn, callback) {
-    this.log("WLIGHTBOX ( %s ): Setting 'On white' characteristic to %s ...", this.deviceName, turnOn);
-    this.desiredWhite = turnOn ? 100 : 0;
-    this.sendSetSimpleRgbStateCommand(callback, "Error setting 'On white'.");
+    // Turning on option is handled by @setWhiteBrightness
+    if (!turnOn) {
+        this.log("WLIGHTBOX ( %s ): Setting 'On white' characteristic to %s ...", this.deviceName, turnOn);
+        this.desiredWhite = turnOn ? 100 : 0;
+        this.sendSetSimpleRgbStateCommand(callback, "Error setting 'On white'.");
+    } else {
+        callback(null); // success
+    }
 };
 
 WLightBoxAccessoryWrapper.prototype.getWhiteBrightness = function (callback) {

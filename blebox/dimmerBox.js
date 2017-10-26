@@ -74,8 +74,8 @@ DimmerBoxAccessoryWrapper.prototype.checkSpecificState = function () {
 
 DimmerBoxAccessoryWrapper.prototype.updateCharacteristics = function () {
     if (this.dimmer && this.dimmer.desiredBrightness) {
-        var currentBrightness = Number((this.dimmer.desiredBrightness / 255 * 100).toFixed(0));
-        var currentOnValue = currentBrightness != 0;
+        var currentBrightness = Number((this.dimmer.desiredBrightness / 255 * 100).toFixed(0)) || 0;
+        var currentOnValue = currentBrightness !== 0;
 
         this.accessory.getService(this.lightBulbService)
             .updateCharacteristic(this.onCharacteristic, currentOnValue);
@@ -112,7 +112,7 @@ DimmerBoxAccessoryWrapper.prototype.onDeviceNameChange = function () {
 DimmerBoxAccessoryWrapper.prototype.getOnState = function (callback) {
     this.log("DIMMERBOX ( %s ): Getting 'On' characteristic ...", this.deviceName);
     if (this.isResponding() && this.dimmer) {
-        var currentOnValue = this.dimmer.desiredBrightness != 0;
+        var currentOnValue = this.dimmer.currentBrightness !== 0;
         this.log("DIMMERBOX ( %s ): Current 'On' characteristic is %s", this.deviceName, currentOnValue);
         callback(null, currentOnValue);
     } else {
@@ -122,9 +122,14 @@ DimmerBoxAccessoryWrapper.prototype.getOnState = function (callback) {
 };
 
 DimmerBoxAccessoryWrapper.prototype.setOnState = function (turnOn, callback) {
-    this.log("DIMMERBOX ( %s ): Setting 'On' characteristic to %s ...", this.deviceName, turnOn);
-    var brightness = turnOn ? 255 : 0;
-    this.sendSetSimpleDimmerStateCommand(brightness, callback, "Error setting 'On'.");
+    var currentOnValue = this.dimmer.currentBrightness !== 0;
+    if (!turnOn || !currentOnValue) {
+        this.log("DIMMERBOX ( %s ): Setting 'On' characteristic to %s ...", this.deviceName, turnOn);
+        var brightness = turnOn ? 255 : 0;
+        this.sendSetSimpleDimmerStateCommand(brightness, callback, "Error setting 'On'.");
+    } else {
+        callback(null);
+    }
 };
 
 DimmerBoxAccessoryWrapper.prototype.getBrightness = function (callback) {

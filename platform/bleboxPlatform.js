@@ -2,13 +2,13 @@ var os = require('os');
 var communication = require("./../common/communication");
 var bleboxCommands = require("./../common/bleboxCommands");
 var BLEBOX_TYPE = require("./../common/bleboxConst").BLEBOX_TYPE;
-var GateBoxAccessoryWrapper = require("./../blebox/gateBox");
-var DimmerBoxAccessoryWrapper = require("./../blebox/dimmerBox");
-var ShutterBoxAccessoryWrapper = require("./../blebox/shutterBox");
-var SwitchBoxAccessoryWrapper = require("./../blebox/switchBox");
-var SwitchBoxDAccessoryWrapper = require("./../blebox/switchBoxD");
-var WLightBoxAccessoryWrapper = require("./../blebox/wLightBox");
-var WLightBoxSAccessoryWrapper = require("./../blebox/wLightBoxS");
+var GateBoxAccessoryWrapperFactory = require("./../blebox/gateBox");
+var DimmerBoxAccessoryWrapperFactory = require("./../blebox/dimmerBox");
+var ShutterBoxAccessoryWrapperFactory = require("./../blebox/shutterBox");
+var SwitchBoxAccessoryWrapperFactory = require("./../blebox/switchBox");
+var SwitchBoxDAccessoryWrapperFactory = require("./../blebox/switchBoxD");
+var WLightBoxAccessoryWrapperFactory = require("./../blebox/wLightBox");
+var WLightBoxSAccessoryWrapperFactory = require("./../blebox/wLightBoxS");
 
 module.exports = BleBoxPlatform;
 
@@ -34,24 +34,24 @@ BleBoxPlatform.prototype.prepareIpListToScan = function () {
     var interfaces = os.networkInterfaces();
     for (var i in interfaces) {
         for (var j in interfaces[i]) {
-            var interface = interfaces[i][j];
-            if (interface.family === 'IPv4' && !interface.internal) {
-                this.addIpsFromInterface(interface);
+            var netInterface = interfaces[i][j];
+            if (netInterface.family === 'IPv4' && !netInterface.internal) {
+                this.addIpsFromInterface(netInterface);
                 break;
             }
         }
     }
 };
 
-BleBoxPlatform.prototype.addIpsFromInterface = function (interface) {
-    var maskArray = interface.netmask.split('.', 4);
+BleBoxPlatform.prototype.addIpsFromInterface = function (netInterface) {
+    var maskArray = netInterface.netmask.split('.', 4);
     var maskBitsCount = 0;
     for (var i in maskArray) {
         var maskNode = Number(maskArray[i]);
         maskBitsCount += (((maskNode >>> 0).toString(2)).match(/1/g) || []).length;
     }
     if (maskBitsCount > 16 && maskBitsCount < 32) {
-        var ipNumber = ipStringToNumber(interface.address);
+        var ipNumber = ipStringToNumber(netInterface.address);
         if (ipNumber) {
             var firstPossibleIpNumber = ipNumber & ((-1 << (32 - maskBitsCount))); //network address
             var lastPossibleIpNumber = firstPossibleIpNumber + Math.pow(2, (32 - maskBitsCount)) - 1; // broadcast address
@@ -61,7 +61,7 @@ BleBoxPlatform.prototype.addIpsFromInterface = function (interface) {
             for (var j = 1; j < possibleIpAddressesCount; j++) {
                 var currentIpNumber = firstPossibleIpNumber + j;
                 var currentIpString = ipNumberToString(currentIpNumber);
-                if (this.ipList.indexOf(currentIpString) == -1) {
+                if (this.ipList.indexOf(currentIpString) === -1) {
                     this.ipList.push(currentIpString);
                 }
             }
@@ -78,7 +78,7 @@ BleBoxPlatform.prototype.addIpsFromInterface = function (interface) {
 
     function ipStringToNumber(ipString) {
         var split = ipString.split('.', 4);
-        if (split.length == 4) {
+        if (split.length === 4) {
             var myInt = (
                 parseFloat(split[0] * 16777216)    /* 2^24 */
                 + parseFloat(split[1] * 65536)        /* 2^16 */
@@ -92,34 +92,37 @@ BleBoxPlatform.prototype.addIpsFromInterface = function (interface) {
 };
 
 BleBoxPlatform.prototype.configureAccessory = function (accessory) {
+    var accessoryWrapperFactory;
     var accessoryWrapper;
     switch (accessory.context.blebox.type) {
         case BLEBOX_TYPE.WLIGHTBOXS:
-            accessoryWrapper = WLightBoxSAccessoryWrapper.restore(accessory, this.log, this.api, accessory.context.blebox);
+            accessoryWrapperFactory = WLightBoxSAccessoryWrapperFactory;
             break;
         case BLEBOX_TYPE.WLIGHTBOX:
-            accessoryWrapper = WLightBoxAccessoryWrapper.restore(accessory, this.log, this.api, accessory.context.blebox);
+            accessoryWrapperFactory = WLightBoxAccessoryWrapperFactory;
             break;
         case BLEBOX_TYPE.DIMMERBOX:
-            accessoryWrapper = DimmerBoxAccessoryWrapper.restore(accessory, this.log, this.api, accessory.context.blebox);
+            accessoryWrapperFactory = DimmerBoxAccessoryWrapperFactory;
             break;
         case BLEBOX_TYPE.SHUTTERBOX:
-            accessoryWrapper = ShutterBoxAccessoryWrapper.restore(accessory, this.log, this.api, accessory.context.blebox);
+            accessoryWrapperFactory = ShutterBoxAccessoryWrapperFactory;
             break;
         case BLEBOX_TYPE.GATEBOX:
-            accessoryWrapper = GateBoxAccessoryWrapper.restore(accessory, this.log, this.api, accessory.context.blebox);
+            accessoryWrapperFactory = GateBoxAccessoryWrapperFactory;
             break;
         case BLEBOX_TYPE.SWITCHBOXD:
-            accessoryWrapper = SwitchBoxDAccessoryWrapper.restore(accessory, this.log, this.api, accessory.context.blebox);
+            accessoryWrapperFactory = SwitchBoxDAccessoryWrapperFactory;
             break;
         case BLEBOX_TYPE.SWITCHBOX:
-            accessoryWrapper = SwitchBoxAccessoryWrapper.restore(accessory, this.log, this.api, accessory.context.blebox);
+            accessoryWrapperFactory = SwitchBoxAccessoryWrapperFactory;
             break;
         default :
             console.log("Wrong accessory!", accessory);
             this.api.unregisterPlatformAccessories("homebridge-blebox", "BleBoxPlatform", [accessory]);
             return;
     }
+
+    accessoryWrapper = accessoryWrapperFactory.restore(accessory, this.log, this.api, accessory.context.blebox);
 
     this.addAccessoryWrapper(accessoryWrapper, false);
 };
@@ -171,6 +174,13 @@ BleBoxPlatform.prototype.checkIfSearchIsFinishedAndScheduleNext = function (inde
     }
 };
 
+BleBoxPlatform.prototype.createAndAddAccessoryWrapper = function (accessoryWrapperFactory, deviceInfo, stateInfo) {
+    if (accessoryWrapperFactory && deviceInfo && stateInfo) {
+        var accessoryWrapper = accessoryWrapperFactory.create(this.homebridge, this.log, this.api, deviceInfo, stateInfo);
+        this.addAccessoryWrapper(accessoryWrapper, true);
+    }
+};
+
 BleBoxPlatform.prototype.checkSpecificStateAndAddAccessory = function (deviceInfo) {
     var accessoryWrapper = null;
     var ipAddress = deviceInfo.ip;
@@ -179,70 +189,49 @@ BleBoxPlatform.prototype.checkSpecificStateAndAddAccessory = function (deviceInf
         case BLEBOX_TYPE.WLIGHTBOXS:
             communication.send(bleboxCommands.getLightState, ipAddress, {
                 onSuccess: function (lightInfo) {
-                    if (lightInfo) {
-                        accessoryWrapper = WLightBoxSAccessoryWrapper.create(self.homebridge, self.log, self.api, deviceInfo, lightInfo);
-                        self.addAccessoryWrapper(accessoryWrapper, true);
-                    }
+                    self.createAndAddAccessoryWrapper(WLightBoxSAccessoryWrapperFactory, deviceInfo, lightInfo);
                 }
             });
             break;
         case BLEBOX_TYPE.WLIGHTBOX:
             communication.send(bleboxCommands.getRgbwState, ipAddress, {
                 onSuccess: function (rgbState) {
-                    if (rgbState) {
-                        accessoryWrapper = WLightBoxAccessoryWrapper.create(self.homebridge, self.log, self.api, deviceInfo, rgbState);
-                        self.addAccessoryWrapper(accessoryWrapper, true);
-                    }
+                    self.createAndAddAccessoryWrapper(WLightBoxAccessoryWrapperFactory, deviceInfo, rgbState);
                 }
             });
             break;
         case BLEBOX_TYPE.DIMMERBOX:
             communication.send(bleboxCommands.getDimmerState, ipAddress, {
                 onSuccess: function (dimmerInfo) {
-                    if (dimmerInfo) {
-                        accessoryWrapper = DimmerBoxAccessoryWrapper.create(self.homebridge, self.log, self.api, deviceInfo, dimmerInfo);
-                        self.addAccessoryWrapper(accessoryWrapper, true);
-                    }
+                    self.createAndAddAccessoryWrapper(DimmerBoxAccessoryWrapperFactory, deviceInfo, dimmerInfo);
                 }
             });
             break;
         case BLEBOX_TYPE.SHUTTERBOX:
             communication.send(bleboxCommands.getShutterState, ipAddress, {
                 onSuccess: function (shutterInfo) {
-                    if (shutterInfo) {
-                        accessoryWrapper = ShutterBoxAccessoryWrapper.create(self.homebridge, self.log, self.api, deviceInfo, shutterInfo);
-                        self.addAccessoryWrapper(accessoryWrapper, true);
-                    }
+                    self.createAndAddAccessoryWrapper(ShutterBoxAccessoryWrapperFactory, deviceInfo, shutterInfo);
                 }
             });
             break;
         case BLEBOX_TYPE.GATEBOX:
             communication.send(bleboxCommands.getGateState, ipAddress, {
                 onSuccess: function (gateInfo) {
-                    if (gateInfo) {
-                        accessoryWrapper = GateBoxAccessoryWrapper.create(self.homebridge, self.log, self.api, deviceInfo, gateInfo);
-                        self.addAccessoryWrapper(accessoryWrapper, true);
-                    }
+                    self.createAndAddAccessoryWrapper(GateBoxAccessoryWrapperFactory, deviceInfo, gateInfo);
                 }
             });
             break;
         case BLEBOX_TYPE.SWITCHBOXD:
             communication.send(bleboxCommands.getRelayState, ipAddress, {
                 onSuccess: function (relayInfo) {
-                    if (relayInfo) {
-                        accessoryWrapper = SwitchBoxDAccessoryWrapper.create(self.homebridge, self.log, self.api, deviceInfo, relayInfo);
-                        self.addAccessoryWrapper(accessoryWrapper, true);
-                    }
+                    self.createAndAddAccessoryWrapper(SwitchBoxDAccessoryWrapperFactory, deviceInfo, relayInfo);
                 }
             });
             break;
         case BLEBOX_TYPE.SWITCHBOX:
             communication.send(bleboxCommands.getRelayState, ipAddress, {
                 onSuccess: function (relayInfo) {
-                    if (relayInfo) {
-                        accessoryWrapper = SwitchBoxAccessoryWrapper.create(self.homebridge, self.log, self.api, deviceInfo, relayInfo);
-                        self.addAccessoryWrapper(accessoryWrapper, true);
-                    }
+                    self.createAndAddAccessoryWrapper(SwitchBoxAccessoryWrapperFactory, deviceInfo, relayInfo);
                 }
             });
             break;
