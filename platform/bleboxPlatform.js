@@ -10,6 +10,7 @@ var SwitchBoxDAccessoryWrapperFactory = require("./../blebox/switchBoxD");
 var WLightBoxAccessoryWrapperFactory = require("./../blebox/wLightBox");
 var WLightBoxSAccessoryWrapperFactory = require("./../blebox/wLightBoxS");
 var SmartWindowBoxAccessoryWrapperFactory = require("./../blebox/smartWindowBox");
+var SaunaBoxAccessoryWrapperFactory = require("./../blebox/saunaBox");
 
 module.exports = BleBoxPlatform;
 
@@ -70,11 +71,11 @@ BleBoxPlatform.prototype.addIpsFromInterface = function (netInterface) {
     }
 
     function ipNumberToString(ipNumber) {
-        var byte1 = ( ipNumber >>> 24 );
-        var byte2 = ( ipNumber >>> 16 ) & 255;
-        var byte3 = ( ipNumber >>> 8 ) & 255;
+        var byte1 = (ipNumber >>> 24);
+        var byte2 = (ipNumber >>> 16) & 255;
+        var byte3 = (ipNumber >>> 8) & 255;
         var byte4 = ipNumber & 255;
-        return ( byte1 + '.' + byte2 + '.' + byte3 + '.' + byte4 );
+        return (byte1 + '.' + byte2 + '.' + byte3 + '.' + byte4);
     }
 
     function ipStringToNumber(ipString) {
@@ -120,6 +121,9 @@ BleBoxPlatform.prototype.configureAccessory = function (accessory) {
         case BLEBOX_TYPE.SMARTWINDOWBOX:
             accessoryWrapperFactory = SmartWindowBoxAccessoryWrapperFactory;
             break;
+        case BLEBOX_TYPE.SAUNABOX:
+            accessoryWrapperFactory = SaunaBoxAccessoryWrapperFactory;
+            break;
         default :
             console.log("Wrong accessory!", accessory);
             this.api.unregisterPlatformAccessories("homebridge-blebox", "BleBoxPlatform", [accessory]);
@@ -145,12 +149,14 @@ BleBoxPlatform.prototype.sendSearchRequest = function (index) {
                 onSuccess: function (deviceInfo) {
                     if (deviceInfo) {
                         deviceInfo = deviceInfo.device || deviceInfo;
-                        deviceInfo.ip = ipAddress;
-                        var accessoryWrapperObj = self.accessoriesWrapperObj[deviceInfo.id];
-                        if (!accessoryWrapperObj) {
-                            self.checkSpecificStateAndAddAccessory(deviceInfo)
-                        } else {
-                            accessoryWrapperObj.setDeviceIp(deviceInfo);
+                        if (deviceInfo.id && deviceInfo.type) {
+                            deviceInfo.ip = ipAddress;
+                            var accessoryWrapperObj = self.accessoriesWrapperObj[deviceInfo.id];
+                            if (!accessoryWrapperObj) {
+                                self.checkSpecificStateAndAddAccessory(deviceInfo)
+                            } else {
+                                accessoryWrapperObj.setDeviceIp(deviceInfo);
+                            }
                         }
                     }
                     self.checkIfSearchIsFinishedAndScheduleNext(index);
@@ -185,10 +191,10 @@ BleBoxPlatform.prototype.createAndAddAccessoryWrapper = function (accessoryWrapp
 };
 
 BleBoxPlatform.prototype.checkSpecificStateAndAddAccessory = function (deviceInfo) {
-    var accessoryWrapper = null;
     var ipAddress = deviceInfo.ip;
     var self = this;
-    switch (typeof deviceInfo.type === 'string' && deviceInfo.type.toLowerCase()) {
+    var deviceType = deviceInfo.type.toLowerCase();
+    switch (deviceType) {
         case BLEBOX_TYPE.WLIGHTBOXS:
             communication.send(bleboxCommands.getLightState, ipAddress, {
                 onSuccess: function (lightInfo) {
@@ -242,6 +248,13 @@ BleBoxPlatform.prototype.checkSpecificStateAndAddAccessory = function (deviceInf
             communication.send(bleboxCommands.getWindowState, ipAddress, {
                 onSuccess: function (windowInfo) {
                     self.createAndAddAccessoryWrapper(SmartWindowBoxAccessoryWrapperFactory, deviceInfo, windowInfo);
+                }
+            });
+            break;
+        case BLEBOX_TYPE.SAUNABOX:
+            communication.send(bleboxCommands.getHeatState, ipAddress, {
+                onSuccess: function (heatInfo) {
+                    self.createAndAddAccessoryWrapper(SaunaBoxAccessoryWrapperFactory, deviceInfo, heatInfo);
                 }
             });
             break;
