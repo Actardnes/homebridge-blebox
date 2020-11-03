@@ -161,7 +161,7 @@ ShutterBoxAccessoryWrapper.prototype.setTargetPosition = function (position, cal
     this.log("SHUTTERBOX: Setting 'target position' characteristic to %s ...", position);
     position = 100 - position;
     var self = this;
-    var command = this.shutter && this.shutter.controlType != undefined ? bleboxCommands.setSimplePositionShutterState : bleboxCommands.setSimpleShutterState ;
+    var command = this.shutter.desiredPos.position != undefined ? bleboxCommands.setSimplePositionShutterState : bleboxCommands.setSimpleShutterState;
     communication.send(command, this.deviceIp, {
         params: [position],
         onSuccess: function (shutterState) {
