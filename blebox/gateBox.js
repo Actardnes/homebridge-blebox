@@ -1,155 +1,153 @@
-var communication = require("../common/communication");
-var bleboxCommands = require("../common/bleboxCommands");
-var GATEBOX_TYPE = require("../common/bleboxConst").BLEBOX_TYPE.GATEBOX;
-var AbstractBoxWrapper = require("./abstractBox");
+const communication = require("../common/communication");
+const bleboxCommands = require("../common/bleboxCommands");
+const GATEBOX_TYPE = require("../common/bleboxConst").BLEBOX_TYPE.GATEBOX;
+const AbstractBoxWrapper = require("./abstractBox");
 
-module.exports = {
-    create: function (homebridge, log, api, deviceInfo, gateInfo) {
-        return new GateBoxAccessoryWrapper(homebridge, null, log, api, deviceInfo, gateInfo);
-    }, restore: function (accessory, log, api, deviceInfo) {
-        return new GateBoxAccessoryWrapper(null, accessory, log, api, deviceInfo.device, deviceInfo.gate);
-    }
-};
+class GateBoxAccessoryWrapper extends AbstractBoxWrapper {
+    constructor(accessory, log, api, deviceInfo, stateInfo) {
+        super(accessory, log, api);
 
-function GateBoxAccessoryWrapper(homebridge, accessory, log, api, deviceInfo, gateInfo) {
-    AbstractBoxWrapper.call(this, accessory, log, deviceInfo);
-    this.gateInfo = gateInfo ? (gateInfo.gate || gateInfo) : null;
+        this.type = GATEBOX_TYPE;
+        this.checkStateCommand = bleboxCommands.getGateState;
 
-    this.nameCharacteristic = api.hap.Characteristic.Name;
-    this.currentDoorStateCharacteristic = api.hap.Characteristic.CurrentDoorState;
-    this.targetDoorStateCharacteristic = api.hap.Characteristic.TargetDoorState;
-    this.obstructionDetectedCharacteristic = api.hap.Characteristic.ObstructionDetected;
-    this.garageDoorOpenerService = api.hap.Service.GarageDoorOpener;
+        this.servicesDefList = [api.hap.Service.GarageDoorOpener];
+        this.servicesSubTypes = [];
 
-    if (!this.accessory) {
-        var uuid = homebridge.hap.uuid.generate(this.deviceName + GATEBOX_TYPE + this.deviceIp);
-        this.accessory = new homebridge.platformAccessory(this.deviceName, uuid);
-        this.accessory.addService(this.garageDoorOpenerService, this.deviceName);
+        this.currentDoorStateCharacteristic = api.hap.Characteristic.CurrentDoorState;
+        this.targetDoorStateCharacteristic = api.hap.Characteristic.TargetDoorState;
+        this.obstructionDetectedCharacteristic = api.hap.Characteristic.ObstructionDetected;
+
+        this.init(this.servicesDefList, this.servicesSubTypes, deviceInfo, stateInfo);
+
+        this.assignCharacteristics();
+
+        this.startListening();
     }
 
-    this.accessory.getService(this.garageDoorOpenerService)
-        .getCharacteristic(this.currentDoorStateCharacteristic)
-        .on('get', this.getCurrentDoorState.bind(this));
+    assignCharacteristics() {
+        super.assignCharacteristics();
+        const serviceNumber = 1;
+        const service = this.accessory.services[serviceNumber];
 
-    this.accessory.getService(this.garageDoorOpenerService)
-        .getCharacteristic(this.targetDoorStateCharacteristic)
-        .on('get', this.getTargetDoorState.bind(this))
-        .on('set', this.setTargetDoorState.bind(this));
+        service.getCharacteristic(this.currentDoorStateCharacteristic)
+            .on('get', this.onGetCurrentDoorState.bind(this));
 
-    this.accessory.getService(this.garageDoorOpenerService)
-        .getCharacteristic(this.obstructionDetectedCharacteristic)
-        .on('get', this.getObstructionDetected.bind(this));
+        service.getCharacteristic(this.targetDoorStateCharacteristic)
+            .on('get', this.onGetTargetDoorState.bind(this))
+            .on('set', this.onSetTargetDoorState.bind(this));
 
-    this.accessory.getService(this.garageDoorOpenerService)
-        .getCharacteristic(this.nameCharacteristic)
-        .on('get', this.getName.bind(this));
+        service.getCharacteristic(this.obstructionDetectedCharacteristic)
+            .on('get', this.onGetObstructionDetected.bind(this));
 
-    //for restore purpose
-    this.accessory.context.blebox = {
-        "type": GATEBOX_TYPE,
-        "device": {
-            "id": this.deviceId,
-            "ip": this.deviceIp,
-            "deviceName": this.deviceName
-        }, "gate": this.gateInfo
+    }
+
+    updateStateInfoCharacteristics() {
+        const gate = this.getGate();
+        if (gate) {
+            //update characteristics
+            const serviceNumber = 1;
+            const service = this.accessory.services[serviceNumber];
+            service.updateCharacteristic(this.currentDoorStateCharacteristic, this.getCurrentDoorStateValue());
+
+            service.updateCharacteristic(this.targetDoorStateCharacteristic, this.getTargetDoorStateValue());
+        }
     };
 
-    this.updateCharacteristics();
-    this.startListening();
-}
+    updateStateInfo(stateInfo) {
+        if (stateInfo) {
+            this.accessory.context.blebox.gate = stateInfo.gate || stateInfo;
+            this.updateStateInfoCharacteristics();
+        }
+    }
 
-GateBoxAccessoryWrapper.prototype = Object.create(AbstractBoxWrapper.prototype);
+    getGate() {
+        return this.accessory.context.blebox.gate;
+    }
 
-GateBoxAccessoryWrapper.prototype.checkSpecificState = function () {
-    var self = this;
-    communication.send(bleboxCommands.getGateState, self.deviceIp, {
-        onSuccess: function (gateInfo) {
-            if (gateInfo) {
-                self.badRequestsCounter = 0;
-                gateInfo = gateInfo.gate || gateInfo;
-                self.gateInfo = gateInfo;
-                self.updateCharacteristics();
+    getCurrentDoorStateValue() {
+        let state = this.currentDoorStateCharacteristic.OPEN;
+        const gate = this.getGate();
+        if (gate) {
+            const currentPosition = Number(gate.currentPos) || 0;
+            if (currentPosition === 0) {
+                state = this.currentDoorStateCharacteristic.CLOSED;
             }
-        }, onError: function () {
-            self.badRequestsCounter++;
         }
-    });
-};
+        return state;
+    };
 
-GateBoxAccessoryWrapper.prototype.updateCharacteristics = function () {
-    if (this.gateInfo) {
-        //update characteristics
-        this.accessory.getService(this.garageDoorOpenerService)
-            .updateCharacteristic(this.currentDoorStateCharacteristic, this.getCurrentDoorStateValue());
-    }
-};
-
-GateBoxAccessoryWrapper.prototype.onDeviceNameChange = function () {
-    this.accessory.getService(this.garageDoorOpenerService)
-        .updateCharacteristic(this.nameCharacteristic, this.deviceName);
-};
-
-GateBoxAccessoryWrapper.prototype.getCurrentDoorStateValue = function () {
-    var state = this.currentDoorStateCharacteristic.OPEN; //default value
-    if (this.gateInfo) {
-        var currentPosition = Number(this.gateInfo.currentPos) || 0;
-        if (currentPosition === 0) {
-            state = this.currentDoorStateCharacteristic.CLOSED;
+    getTargetDoorStateValue() {
+        let state = this.targetDoorStateCharacteristic.OPEN;
+        const gate = this.getGate();
+        if (gate) {
+            const currentPosition = Number(gate.desiredPos) || 0;
+            if (currentPosition === 0) {
+                state = this.targetDoorStateCharacteristic.CLOSED;
+            }
         }
-    }
-    return state;
-};
+        return state;
+    };
 
-GateBoxAccessoryWrapper.prototype.getCurrentDoorState = function (callback) {
-    this.log("GATEBOX ( %s ): Getting 'current door' characteristic ...", this.deviceName);
-    if (this.isResponding() && this.gateInfo) {
-        var currentState = this.getCurrentDoorStateValue();
-        this.log("GATEBOX ( %s ): Current 'current door' characteristic is %s", this.deviceName, currentState);
-        callback(null, currentState);
-    } else {
-        this.log("GATEBOX ( %s ): Error getting 'current door' characteristic. GateInfo: %s", this.deviceName, this.gateInfo);
-        callback(new Error("Error getting 'current door'."));
-    }
-};
+    onGetCurrentDoorState(callback) {
+        this.log("Getting 'current door' characteristic ...");
+        const gate = this.getGate();
+        if (this.isResponding() && gate) {
+            const currentState = this.getCurrentDoorStateValue();
+            this.log("Current 'current door' characteristic is %s", currentState);
+            callback(null, currentState);
+        } else {
+            this.log("Error getting 'current door' characteristic. GateInfo: %s", gate);
+            callback(new Error("Error getting 'current door'."));
+        }
+    };
 
+    onGetTargetDoorState(callback) {
+        this.log("Getting 'target door' characteristic ...");
+        const gate = this.getGate();
+        if (this.isResponding() && gate) {
+            const targetState = this.getTargetDoorStateValue();
+            this.log("Current 'target door' characteristic is %s", targetState);
+            callback(null, targetState);
+        } else {
+            this.log("Error getting 'target door' characteristic. GateInfo: %s", gate);
+            callback(new Error("Error getting 'current door'."));
+        }
+    };
 
-GateBoxAccessoryWrapper.prototype.getTargetDoorState = function (callback) {
-    this.log("GATEBOX ( %s ): Getting 'target door' characteristic ...", this.deviceName);
-    if (this.isResponding() && this.gateInfo) {
-        var currentState = this.getCurrentDoorStateValue();
-        this.log("GATEBOX ( %s ): Current 'target door' characteristic is %s", this.deviceName, currentState);
-        callback(null, currentState);
-    } else {
-        this.log("GATEBOX ( %s ): Error getting 'target door' characteristic. GateInfo: %s", this.deviceName, this.gateInfo);
-        callback(new Error("Error getting 'target door'."));
-    }
-};
-
-GateBoxAccessoryWrapper.prototype.setTargetDoorState = function (state, callback) {
-    this.log("GATEBOX ( %s ): Setting 'target door' characteristic to %s", this.deviceName, state);
-    var self = this;
-    communication.send(bleboxCommands.setSimpleGateState, this.deviceIp, {
-        onSuccess: function (gateInfo) {
-            if (gateInfo) {
-                self.gateInfo = gateInfo.gate || gateInfo;
-                self.updateCharacteristics();
-                callback(null); // success
-            } else {
+    onSetTargetDoorState(state, callback) {
+        this.log("Setting 'target door' characteristic to %s", state);
+        const device = this.getDevice();
+        const self = this;
+        communication.send(bleboxCommands.setSimpleGateState, device.ip, {
+            onSuccess: function (stateInfo) {
+                self.updateStateInfo(stateInfo);
+                callback(null);
+            }, onError: function () {
                 callback(new Error("Error setting 'target door'."));
             }
-        }, onError: function () {
-            callback(new Error("Error setting 'target door'."));
-        }
-    });
-};
+        });
+    };
 
-GateBoxAccessoryWrapper.prototype.getObstructionDetected = function (callback) {
-    this.log("GATEBOX ( %s ): Getting 'obstruction detected' characteristic ...", this.deviceName);
-    if (this.isResponding()) {
-        this.log("GATEBOX ( %s ): Current 'obstruction detected' characteristic is %s", this.deviceName, false);
-        callback(null, false);
-    } else {
-        this.log("GATEBOX ( %s ): Error getting 'obstruction detected' characteristic.", this.deviceName);
-        callback(new Error("Error getting 'obstruction detected'."));
+    onGetObstructionDetected(callback) {
+        this.log("Getting 'obstruction detected' characteristic ...");
+        if (this.isResponding()) {
+            const isObstructionDetected = false;
+            this.log("Current 'obstruction detected' characteristic is %s", isObstructionDetected);
+            callback(null, isObstructionDetected);
+        } else {
+            this.log("Error getting 'obstruction detected' characteristic.");
+            callback(new Error("Error getting 'obstruction detected'."));
+        }
+    };
+}
+
+
+module.exports = {
+    type: GATEBOX_TYPE,
+    checkStateCommand: bleboxCommands.getGateState,
+    create: function (accessory, log, api, deviceInfo, stateInfo) {
+        return new GateBoxAccessoryWrapper(accessory, log, api, deviceInfo, stateInfo);
+    }, restore: function (accessory, log, api) {
+        return new GateBoxAccessoryWrapper(accessory, log, api);
     }
 };

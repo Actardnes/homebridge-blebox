@@ -1,192 +1,175 @@
-var communication = require("../common/communication");
-var bleboxCommands = require("../common/bleboxCommands");
-var SHUTTERBOX_TYPE = require("../common/bleboxConst").BLEBOX_TYPE.SHUTTERBOX;
-var AbstractBoxWrapper = require("./abstractBox");
+const communication = require("../common/communication");
+const bleboxCommands = require("../common/bleboxCommands");
+const SHUTTERBOX_TYPE = require("../common/bleboxConst").BLEBOX_TYPE.SHUTTERBOX;
+const AbstractBoxWrapper = require("./abstractBox");
 
-module.exports = {
-    create: function (homebridge, log, api, deviceInfo, shutterInfo) {
-        return new ShutterBoxAccessoryWrapper(homebridge, null, log, api, deviceInfo, shutterInfo);
-    }, restore: function (accessory, log, api, deviceInfo) {
-        return new ShutterBoxAccessoryWrapper(null, accessory, log, api, deviceInfo.device, deviceInfo.shutter);
-    }
-};
 
-function ShutterBoxAccessoryWrapper(homebridge, accessory, log, api, deviceInfo, shutterInfo) {
-    AbstractBoxWrapper.call(this, accessory, log, deviceInfo);
-    this.shutter = shutterInfo ? (shutterInfo.shutter || shutterInfo) : null;
+class ShutterBoxAccessoryWrapper extends AbstractBoxWrapper {
+    constructor(accessory, log, api, deviceInfo, stateInfo) {
+        super(accessory, log, api);
 
-    this.nameCharacteristic = api.hap.Characteristic.Name;
-    this.currentPositionCharacteristic = api.hap.Characteristic.CurrentPosition;
-    this.targetPositionCharacteristic = api.hap.Characteristic.TargetPosition;
-    this.postitionStateCharacteristic = api.hap.Characteristic.PositionState;
-    this.windowCoveringService = api.hap.Service.WindowCovering;
+        this.type = SHUTTERBOX_TYPE;
+        this.checkStateCommand = bleboxCommands.getShutterState;
 
-    if (!this.accessory) {
-        var uuid = homebridge.hap.uuid.generate(this.deviceName + SHUTTERBOX_TYPE + this.deviceIp);
-        this.accessory = new homebridge.platformAccessory(this.deviceName, uuid);
-        this.accessory.addService(this.windowCoveringService, this.deviceName);
+        this.servicesDefList = [api.hap.Service.WindowCovering];
+        this.servicesSubTypes = [];
+
+        this.currentPositionCharacteristic = api.hap.Characteristic.CurrentPosition;
+        this.targetPositionCharacteristic = api.hap.Characteristic.TargetPosition;
+        this.postitionStateCharacteristic = api.hap.Characteristic.PositionState;
+
+        this.init(this.servicesDefList, this.servicesSubTypes, deviceInfo, stateInfo);
+
+        this.assignCharacteristics();
+
+        this.startListening();
     }
 
-    this.accessory.getService(this.windowCoveringService)
-        .getCharacteristic(this.postitionStateCharacteristic)
-        .on('get', this.getPositionState.bind(this));
+    assignCharacteristics() {
+        this.log("Services: "+this.getAccessory().services.length);
+        super.assignCharacteristics();
+        const serviceNumber = 1;
+        const service = this.accessory.services[serviceNumber];
+        service.getCharacteristic(this.postitionStateCharacteristic)
+            .on('get', this.onGetPositionState.bind(this));
 
-    this.accessory.getService(this.windowCoveringService)
-        .getCharacteristic(this.currentPositionCharacteristic)
-        .on('get', this.getCurrentPosition.bind(this));
+        service.getCharacteristic(this.targetPositionCharacteristic)
+            .on('get', this.onGetTargetPosition.bind(this))
+            .on('set', this.onSetTargetPosition.bind(this));
 
-    this.accessory.getService(this.windowCoveringService)
-        .getCharacteristic(this.targetPositionCharacteristic)
-        .on('get', this.getTargetPosition.bind(this))
-        .on('set', this.setTargetPosition.bind(this));
+        service.getCharacteristic(this.currentPositionCharacteristic)
+            .on('get', this.onGetCurrentPosition.bind(this));
+    }
 
-    this.accessory.getService(this.windowCoveringService)
-        .getCharacteristic(this.nameCharacteristic)
-        .on('get', this.getName.bind(this));
+    updateStateInfoCharacteristics() {
+        const shutter = this.getShutter();
+        if (shutter) {
+            //update characteristics
+            const serviceNumber = 1;
+            const service = this.accessory.services[serviceNumber];
+            service.updateCharacteristic(this.currentPositionCharacteristic, this.getCurrentPositionValue());
 
-    //for restore purpose
-    this.accessory.context.blebox = {
-        "type": SHUTTERBOX_TYPE,
-        "device": {
-            "id": this.deviceId,
-            "ip": this.deviceIp,
-            "deviceName": this.deviceName
-        }, "shutter": this.shutter
+            service.updateCharacteristic(this.targetPositionCharacteristic, this.getTargetPositionValue());
+
+            service.updateCharacteristic(this.postitionStateCharacteristic, this.getPositionStateValue());
+
+        }
     };
 
-    this.updateCharacteristics();
-    this.startListening();
-}
+    updateStateInfo(stateInfo) {
+        if (stateInfo) {
+            this.accessory.context.blebox.shutter = stateInfo.shutter || stateInfo;
+            this.updateStateInfoCharacteristics();
+        }
+    }
 
-ShutterBoxAccessoryWrapper.prototype = Object.create(AbstractBoxWrapper.prototype);
+    getShutter() {
+        return this.accessory.context.blebox.shutter;
+    }
 
-ShutterBoxAccessoryWrapper.prototype.checkSpecificState = function () {
-    var self = this;
-    communication.send(bleboxCommands.getShutterState, this.deviceIp, {
-        onSuccess: function (shutterState) {
-            if (shutterState) {
-                self.badRequestsCounter = 0;
-                shutterState = shutterState.shutter || shutterState;
-                self.shutter = shutterState;
-                self.updateCharacteristics();
+    _getPositionValue(positionType) {
+        let position = 0;
+        const shutter = this.getShutter();
+        if (shutter) {
+            const shutterPosition = shutter[positionType];
+            position = !isNaN(Number(shutterPosition.position)) ? shutterPosition.position : shutterPosition;
+            position = 100 - (Math.min(Math.max(position, 0), 100) || 0);
+        }
+        return position;
+    }
+
+    getCurrentPositionValue() {
+        return this._getPositionValue('currentPos');
+    };
+
+    getTargetPositionValue() {
+        return this._getPositionValue('desiredPos');
+    };
+
+    getPositionStateValue() {
+        let positionState = this.postitionStateCharacteristic.STOPPED;
+        const shutter = this.getShutter();
+        if (shutter) {
+            switch (shutter.state) {
+                case 0: //down
+                    positionState = this.postitionStateCharacteristic.DECREASING;
+                    break;
+                case 1: // up
+                    positionState = this.postitionStateCharacteristic.INCREASING;
+                    break;
+                default:
+                    positionState = this.postitionStateCharacteristic.STOPPED;
+                    break;
             }
-        }, onError: function () {
-            self.badRequestsCounter++;
         }
-    });
-};
+        return positionState;
+    };
 
-ShutterBoxAccessoryWrapper.prototype.updateCharacteristics = function () {
-    if (this.shutter) {
-        //update characteristics
-        this.accessory.getService(this.windowCoveringService)
-            .updateCharacteristic(this.currentPositionCharacteristic, this.getCurrentPositionValue());
-
-        this.accessory.getService(this.windowCoveringService)
-            .updateCharacteristic(this.targetPositionCharacteristic, this.getTargetPositionValue());
-
-        this.accessory.getService(this.windowCoveringService)
-            .updateCharacteristic(this.postitionStateCharacteristic, this.getPositionStateValue());
-    }
-};
-
-ShutterBoxAccessoryWrapper.prototype.getCurrentPositionValue = function () {
-    var currentPosition = 0;
-    if (this.shutter && this.shutter.currentPos) {
-        currentPosition = (Number(this.shutter.currentPos.position) || ( Number(this.shutter.currentPos) || 0));
-        currentPosition = 100 - Math.min(Math.max(currentPosition, 0), 100);
-    }
-    return currentPosition;
-};
-
-ShutterBoxAccessoryWrapper.prototype.getTargetPositionValue = function () {
-    var currentPosition = 0;
-    if (this.shutter && this.shutter.desiredPos) {
-        currentPosition = (Number(this.shutter.desiredPos.position) || ( Number(this.shutter.desiredPos) || 0));
-        currentPosition = 100 - Math.min(Math.max(currentPosition, 0), 100);
-    }
-    return currentPosition;
-};
-
-ShutterBoxAccessoryWrapper.prototype.getPositionStateValue = function () {
-    var positionState = this.postitionStateCharacteristic.STOPPED;
-    if (this.shutter) {
-        switch (this.shutter.state) {
-            case 0: //down
-                positionState = this.postitionStateCharacteristic.DECREASING;
-                break;
-            case 1: // up
-                positionState = this.postitionStateCharacteristic.INCREASING;
-                break;
-            default:
-                positionState = this.postitionStateCharacteristic.STOPPED;
-                break;
+    onGetCurrentPosition(callback) {
+        this.log("Getting 'Current position' characteristic ...");
+        const shutter = this.getShutter();
+        if (this.isResponding() && shutter) {
+            const currentPosition = this.getCurrentPositionValue();
+            this.log("Current 'Current position' characteristic is %s", currentPosition);
+            callback(null, currentPosition);
+        } else {
+            this.log("Error getting 'Current position' characteristic. Shutter: %s", shutter);
+            callback(new Error("Error getting 'Current position'."));
         }
-    }
-    return positionState;
-};
+    };
 
-ShutterBoxAccessoryWrapper.prototype.onDeviceNameChange = function () {
-    this.accessory.getService(this.windowCoveringService)
-        .updateCharacteristic(this.nameCharacteristic, this.deviceName);
-};
+    onGetTargetPosition(callback) {
+        this.log("Getting 'Target position' characteristic ...");
+        const shutter = this.getShutter();
+        if (this.isResponding() && shutter) {
+            const currentPosition = this.getTargetPositionValue();
+            this.log("Current 'Target position' characteristic is %s", currentPosition);
+            callback(null, currentPosition);
+        } else {
+            this.log("Error getting 'Target position' characteristic. Shutter: %s", shutter);
+            callback(new Error("Error getting 'Target position'."));
+        }
+    };
 
-ShutterBoxAccessoryWrapper.prototype.getCurrentPosition = function (callback) {
-    this.log("SHUTTERBOX ( %s ): Getting 'Current position' characteristic ...", this.deviceName);
-    if (this.isResponding() && this.shutter) {
-        var currentPosition = this.getCurrentPositionValue();
-        this.log("SHUTTERBOX ( %s ): Current 'Current position' characteristic is %s", this.deviceName, currentPosition);
-
-        callback(null, currentPosition);
-    } else {
-        this.log("SHUTTERBOX ( %s ): Error getting 'Current position' characteristic. Shutter: %s", this.deviceName, this.shutter);
-        callback(new Error("Error getting 'Current position'."));
-    }
-};
-
-ShutterBoxAccessoryWrapper.prototype.getTargetPosition = function (callback) {
-    this.log("SHUTTERBOX ( %s ): Getting 'Target position' characteristic ...", this.deviceName);
-    if (this.isResponding() && this.shutter) {
-        var currentPosition = this.getTargetPositionValue();
-        this.log("SHUTTERBOX ( %s ): Current 'Target position' characteristic is %s", this.deviceName, currentPosition);
-
-        callback(null, currentPosition);
-    } else {
-        this.log("SHUTTERBOX ( %s ): Error getting 'Target position' characteristic. Shutter: %s", this.deviceName, this.shutter);
-        callback(new Error("Error getting 'Target position'."));
-    }
-};
-
-ShutterBoxAccessoryWrapper.prototype.setTargetPosition = function (position, callback) {
-    this.log("SHUTTERBOX: Setting 'target position' characteristic to %s ...", position);
-    position = 100 - position;
-    var self = this;
-    var command = this.shutter.desiredPos.position != undefined ? bleboxCommands.setSimplePositionShutterState : bleboxCommands.setSimpleShutterState;
-    communication.send(command, this.deviceIp, {
-        params: [position],
-        onSuccess: function (shutterState) {
-            if (shutterState) {
-                self.shutter = shutterState.shutter || shutterState;
-                self.updateCharacteristics();
-                callback(null); // success
-            } else {
+    onSetTargetPosition(position, callback) {
+        this.log("Setting 'target position' characteristic to %s ...", position);
+        position = 100 - position;
+        const self = this;
+        const shutter = this.getShutter();
+        const command = shutter && shutter.desiredPos.position !== undefined ? bleboxCommands.setSimplePositionShutterState : bleboxCommands.setSimpleShutterState;
+        const device = this.getDevice();
+        communication.send(command, device.ip, {
+            params: [position],
+            onSuccess: function (stateInfo) {
+                self.updateStateInfo(stateInfo);
+                callback(null);
+            },
+            onError: function () {
                 callback(new Error("Error setting 'target position'."));
             }
-        },
-        onError: function () {
-            callback(new Error("Error setting 'target position'."));
-        }
-    });
-};
+        });
+    };
 
-ShutterBoxAccessoryWrapper.prototype.getPositionState = function (callback) {
-    this.log("SHUTTERBOX ( %s ): Getting 'Position state' characteristic ...", this.deviceName);
-    if (this.isResponding() && this.shutter) {
-        var positionState = this.getPositionStateValue();
-        this.log("SHUTTERBOX ( %s ): Current 'Position state' characteristic is %s", this.deviceName, positionState);
-        callback(null, positionState); // success
-    } else {
-        this.log("SHUTTERBOX ( %s ): Error getting 'Position state' characteristic. Shutter: %s", this.deviceName, this.shutter);
-        callback(new Error("Error getting 'Position state'."));
+    onGetPositionState(callback) {
+        this.log("Getting 'Position state' characteristic ...");
+        const shutter = this.getShutter();
+        if (this.isResponding() && shutter) {
+            const positionState = this.getPositionStateValue();
+            this.log("Current 'Position state' characteristic is %s", positionState);
+            callback(null, positionState); // success
+        } else {
+            this.log("Error getting 'Position state' characteristic. Shutter: %s", shutter);
+            callback(new Error("Error getting 'Position state'."));
+        }
+    };
+}
+
+module.exports = {
+    type: SHUTTERBOX_TYPE,
+    checkStateCommand: bleboxCommands.getShutterState,
+    create: function (accessory, log, api, deviceInfo, stateInfo) {
+        return new ShutterBoxAccessoryWrapper(accessory, log, api, deviceInfo, stateInfo);
+    }, restore: function (accessory, log, api) {
+        return new ShutterBoxAccessoryWrapper(accessory, log, api);
     }
 };

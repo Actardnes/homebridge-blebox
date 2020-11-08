@@ -1,275 +1,303 @@
-var communication = require("../common/communication");
-var bleboxCommands = require("../common/bleboxCommands");
-var WLIGHTBOX_TYPE = require("../common/bleboxConst").BLEBOX_TYPE.WLIGHTBOX;
-var AbstractBoxWrapper = require("./abstractBox");
-var colorHelper = require("../common/colorHelper");
+const communication = require("../common/communication");
+const bleboxCommands = require("../common/bleboxCommands");
+const WLIGHTBOX_TYPE = require("../common/bleboxConst").BLEBOX_TYPE.WLIGHTBOX;
+const AbstractBoxWrapper = require("./abstractBox");
+const colorHelper = require("../common/colorHelper");
 
-module.exports = {
-    create: function (homebridge, log, api, deviceInfo, rgbwInfo) {
-        return new WLightBoxAccessoryWrapper(homebridge, null, log, api, deviceInfo, rgbwInfo);
-    }, restore: function (accessory, log, api, deviceInfo) {
-        return new WLightBoxAccessoryWrapper(null, accessory, log, api, deviceInfo.device, deviceInfo.rgbw);
-    }
-};
 
-function WLightBoxAccessoryWrapper(homebridge, accessory, log, api, deviceInfo, rgbwInfo) {
-    AbstractBoxWrapper.call(this, accessory, log, deviceInfo);
-    this.rgbw = rgbwInfo ? (rgbwInfo.rgbw || rgbwInfo) : null;
-    this.desiredHSVColor = {h: 0, s: 0, v: 0};
-    this.desiredWhite = 0;
+class WLightBoxAccessoryWrapper extends AbstractBoxWrapper {
+    constructor(accessory, log, api, deviceInfo, stateInfo) {
+        super(accessory, log, api);
 
-    this.rgbServiceSubtype = "RGB";
-    this.whiteServiceSubtype = "WHITE";
+        this.type = WLIGHTBOX_TYPE;
+        this.checkStateCommand = bleboxCommands.getRgbwState;
 
-    this.nameCharacteristic = api.hap.Characteristic.Name;
-    this.onCharacteristic = api.hap.Characteristic.On;
-    this.brightnessCharacteristic = api.hap.Characteristic.Brightness;
-    this.hueCharacteristic = api.hap.Characteristic.Hue;
-    this.saturationCharacteristic = api.hap.Characteristic.Saturation;
-    this.lightBulbService = api.hap.Service.Lightbulb;
+        this.servicesDefList = [api.hap.Service.Lightbulb, api.hap.Service.Lightbulb];
+        this.servicesSubTypes = ['RGB', 'WHITE'];
 
-    if (!this.accessory) {
-        var uuid = homebridge.hap.uuid.generate(this.deviceName + WLIGHTBOX_TYPE + this.deviceIp);
-        this.accessory = new homebridge.platformAccessory(this.deviceName, uuid);
+        this.onCharacteristic = api.hap.Characteristic.On;
+        this.brightnessCharacteristic = api.hap.Characteristic.Brightness;
+        this.hueCharacteristic = api.hap.Characteristic.Hue;
+        this.saturationCharacteristic = api.hap.Characteristic.Saturation;
 
-        this.firstServiceName = this.rgbServiceSubtype + " " + this.deviceName;
-        this.accessory.addService(this.lightBulbService, this.firstServiceName, this.rgbServiceSubtype);
+        this.desiredHsv = {h: 0, s: 0, v: 0};
 
-        this.secondServiceName = this.whiteServiceSubtype + " " + this.deviceName;
-        this.accessory.addService(this.lightBulbService, this.secondServiceName, this.whiteServiceSubtype);
+        this.init(this.servicesDefList, this.servicesSubTypes, deviceInfo, stateInfo);
+
+        this.assignCharacteristics();
+
+        this.startListening();
     }
 
-    this.accessory.getServiceByUUIDAndSubType(this.lightBulbService, this.rgbServiceSubtype)
-        .getCharacteristic(this.onCharacteristic)
-        .on('get', this.getRgbOnState.bind(this))
-        .on('set', this.setRgbOnState.bind(this));
+    assignCharacteristics() {
+        super.assignCharacteristics();
+        const rgbServiceNumber = 1;
+        const rgbService = this.accessory.services[rgbServiceNumber];
+        rgbService.getCharacteristic(this.onCharacteristic)
+            .on('get', this.onGetRgbOnState.bind(this))
+            .on('set', this.onSetRgbOnState.bind(this));
 
-    this.accessory.getServiceByUUIDAndSubType(this.lightBulbService, this.rgbServiceSubtype)
-        .getCharacteristic(this.brightnessCharacteristic)
-        .on('get', this.getRgbBrightness.bind(this))
-        .on('set', this.setRgbBrightness.bind(this));
+        rgbService.getCharacteristic(this.brightnessCharacteristic)
+            .on('get', this.onGetRgbBrightness.bind(this))
+            .on('set', this.onSetRgbBrightness.bind(this));
 
-    this.accessory.getServiceByUUIDAndSubType(this.lightBulbService, this.rgbServiceSubtype)
-        .getCharacteristic(this.hueCharacteristic)
-        .on('get', this.getRgbHue.bind(this))
-        .on('set', this.setRgbHue.bind(this));
+        rgbService.getCharacteristic(this.hueCharacteristic)
+            .on('get', this.onGetRgbHue.bind(this))
+            .on('set', this.onSetRgbHue.bind(this));
 
-    this.accessory.getServiceByUUIDAndSubType(this.lightBulbService, this.rgbServiceSubtype)
-        .getCharacteristic(this.saturationCharacteristic)
-        .on('get', this.getRgbSaturation.bind(this))
-        .on('set', this.setRgbSaturation.bind(this));
+        rgbService.getCharacteristic(this.saturationCharacteristic)
+            .on('get', this.onGetRgbSaturation.bind(this))
+            .on('set', this.onSetRgbSaturation.bind(this));
 
-    this.accessory.getServiceByUUIDAndSubType(this.lightBulbService, this.whiteServiceSubtype)
-        .getCharacteristic(this.onCharacteristic)
-        .on('get', this.getWhiteOnState.bind(this))
-        .on('set', this.setWhiteOnState.bind(this));
+        const whiteServiceNumber = 2;
+        const whiteService = this.accessory.services[whiteServiceNumber];
+        whiteService.getCharacteristic(this.onCharacteristic)
+            .on('get', this.onGetWhiteOnState.bind(this))
+            .on('set', this.onSetWhiteOnState.bind(this));
 
-    this.accessory.getServiceByUUIDAndSubType(this.lightBulbService, this.whiteServiceSubtype)
-        .getCharacteristic(this.brightnessCharacteristic)
-        .on('get', this.getWhiteBrightness.bind(this))
-        .on('set', this.setWhiteBrightness.bind(this));
+        whiteService.getCharacteristic(this.brightnessCharacteristic)
+            .on('get', this.onGetWhiteBrightness.bind(this))
+            .on('set', this.onSetWhiteBrightness.bind(this));
+    }
 
-    //for restore purpose
-    this.accessory.context.blebox = {
-        "type": WLIGHTBOX_TYPE,
-        "device": {
-            "id": this.deviceId,
-            "ip": this.deviceIp,
-            "deviceName": this.deviceName
-        }, "rgbw": this.rgbw
+    updateStateInfoCharacteristics() {
+        const rgbw = this.getRgbw();
+        if (rgbw) {
+            //update characteristics
+            const rgbServiceNumber = 1;
+            const rgbService = this.accessory.services[rgbServiceNumber];
+            rgbService.updateCharacteristic(this.onCharacteristic, this.getRgbOnValue());
+
+            rgbService.updateCharacteristic(this.hueCharacteristic, this.getRgbHueValue());
+
+            rgbService.updateCharacteristic(this.saturationCharacteristic, this.getRgbSaturationValue());
+
+            rgbService.updateCharacteristic(this.brightnessCharacteristic, this.getRgbBrightnessValue());
+
+            const whiteServiceNumber = 2;
+            const whiteService = this.accessory.services[whiteServiceNumber];
+            whiteService.updateCharacteristic(this.onCharacteristic, this.getWhiteOnValue());
+
+            whiteService.updateCharacteristic(this.brightnessCharacteristic, this.getWhiteBrightnessValue());
+        }
+    }
+
+    updateStateInfo(stateInfo) {
+        if (stateInfo) {
+            this.accessory.context.blebox.rgbw = stateInfo.rgbw || stateInfo;
+            this.desiredHsv = this._getRgbAsHsv();
+            this.updateStateInfoCharacteristics();
+        }
+    }
+
+    getRgbw() {
+        return this.accessory.context.blebox.rgbw;
+    }
+
+    getServiceName(serviceNumber) {
+        const serviceName = super.getServiceName(serviceNumber);
+        const suffix = this.getServiceNameSuffix(serviceNumber);
+        return `${serviceName} ${suffix}`;
+    }
+
+    getServiceNameSuffix(serviceNumber) {
+        return this.servicesSubTypes[serviceNumber];
+    }
+
+
+    _getRgbAsHsv() {
+        const {desiredColor = ""} = this.getRgbw() || {};
+        const desiredRgbHex = desiredColor.substring(0, 6) || "00000000";
+        return colorHelper.rgbToHsv(colorHelper.hexToRgb(desiredRgbHex));
+    }
+
+    getRgbOnValue() {
+        const rgbAsHsv = this._getRgbAsHsv();
+        return rgbAsHsv.v !== 0;
+    }
+
+    getRgbHueValue() {
+        const rgbAsHsv = this._getRgbAsHsv();
+        return rgbAsHsv.h;
+    }
+
+    getRgbSaturationValue() {
+        const rgbAsHsv = this._getRgbAsHsv();
+        return rgbAsHsv.s;
+    }
+
+    getRgbBrightnessValue() {
+        const rgbAsHsv = this._getRgbAsHsv();
+        return rgbAsHsv.v;
+    }
+
+    _getWhiteValue() {
+        const {desiredColor = ""} = this.getRgbw() || {};
+        const desiredWhiteHex = desiredColor.substring(6, 8) || "00";
+        return Number((parseInt(desiredWhiteHex, 16) / 255 * 100).toFixed(0));
+    }
+
+    getWhiteOnValue() {
+        const whiteValue = this._getWhiteValue();
+        return whiteValue !== 0;
+    }
+
+    getWhiteBrightnessValue() {
+        return this._getWhiteValue();
+    }
+
+    sendSetSimpleRgbStateCommand(hsv, white, callback) {
+        const newRgbwColorHex = colorHelper.rgbToHex(colorHelper.hsvToRgb(hsv)) + colorHelper.toHex(white / 100 * 255);
+        const self = this;
+        const device = this.getDevice();
+        communication.send(bleboxCommands.setSimpleRgbwState, device.ip, {
+            params: [newRgbwColorHex],
+            onSuccess: function (stateInfo) {
+                self.updateStateInfo(stateInfo);
+                callback(null);
+            },
+            onError: function () {
+                callback(new Error("Error setting new color: " + newRgbwColorHex));
+            }
+        });
     };
 
-    this.setDesiredColorsAndUpdateCharacteristics();
-    this.startListening();
+    onGetRgbOnState(callback) {
+        this.log("Getting 'On' characteristic ...");
+        const rgbw = this.getRgbw();
+        if (this.isResponding() && rgbw) {
+            const currentRgbOnValue = this.getRgbOnValue();
+            this.log("Current 'On' characteristic is %s", currentRgbOnValue);
+            callback(null, currentRgbOnValue);
+        } else {
+            this.log("Error getting 'On' characteristic. Rgbw: %s", rgbw);
+            callback(new Error("Error getting 'On'."));
+        }
+    };
+
+    onSetRgbOnState(turnOn, callback) {
+        // We should only handle turn OFF
+        if (!turnOn) {
+            this.log("Setting 'On' characteristic to %s ...", turnOn);
+            this.desiredHsv = {h: 0, s: 0, v: 0};
+            this.sendSetSimpleRgbStateCommand(this.desiredHsv, this._getWhiteValue(), callback);
+        } else {
+            callback(null);
+        }
+    }
+
+    onGetRgbBrightness(callback) {
+        this.log("Getting 'Brightness' characteristic ...");
+        const rgbw = this.getRgbw();
+        if (this.isResponding() && rgbw) {
+            const currentRgbBrightnessValue = this.getRgbBrightnessValue();
+            this.log("Current 'Brightness' characteristic is %s", currentRgbBrightnessValue);
+            callback(null, currentRgbBrightnessValue);
+        } else {
+            this.log("Error getting 'Brightness' characteristic. Rgbw: %s", rgbw);
+            callback(new Error("Error getting 'Brightness'."));
+        }
+    }
+
+    onSetRgbBrightness(brightness, callback) {
+        this.log("Setting 'Brightness' characteristic to %s ...", brightness);
+        this.desiredHsv.v = brightness
+        this.sendSetSimpleRgbStateCommand(this.desiredHsv, this._getWhiteValue(), callback);
+    }
+
+    onGetRgbHue(callback) {
+        this.log("Getting 'Hue' characteristic ...");
+        const rgbw = this.getRgbw();
+        if (this.isResponding() && rgbw) {
+            const currentRgbHueValue = this.getRgbHueValue()
+            this.log("Current 'Hue' characteristic is %s", currentRgbHueValue);
+            callback(null, currentRgbHueValue);
+        } else {
+            this.log("Error getting 'Hue' characteristic. Rgbw: %s", rgbw);
+            callback(new Error("Error getting 'Hue'."));
+        }
+    }
+
+
+    onSetRgbHue(hue, callback) {
+        this.log("Setting 'Hue' characteristic to %s ...", hue);
+        this.desiredHsv.h = hue;
+        this.desiredHsv.v = this.desiredHsv.v || 100;
+        this.sendSetSimpleRgbStateCommand(this.desiredHsv, this._getWhiteValue(), callback);
+    }
+
+    onGetRgbSaturation(callback) {
+        this.log("Getting 'Saturation' characteristic ...");
+        const rgbw = this.getRgbw();
+        if (this.isResponding() && rgbw) {
+            const currentRgbSaturationValue = this.getRgbSaturationValue()
+            this.log("Current 'Saturation' characteristic is %s", currentRgbSaturationValue);
+            callback(null, currentRgbSaturationValue);
+        } else {
+            this.log("Error getting 'Saturation' characteristic. Rgbw: %s", rgbw);
+            callback(new Error("Error getting 'Saturation'."));
+        }
+    }
+
+    onSetRgbSaturation(saturation, callback) {
+        this.log("Setting 'Saturation' characteristic to %s ...", saturation);
+        this.desiredHsv.s = saturation;
+        this.desiredHsv.v = this.desiredHsv.v || 100;
+        this.sendSetSimpleRgbStateCommand(this.desiredHsv, this._getWhiteValue(), callback);
+    }
+
+    onGetWhiteOnState(callback) {
+        this.log("Getting 'On white' characteristic ...");
+        const rgbw = this.getRgbw();
+        if (this.isResponding() && rgbw) {
+            const currentWhiteOnValue = this.getWhiteOnValue();
+            this.log("Current 'On white' characteristic is %s", currentWhiteOnValue);
+            callback(null, currentWhiteOnValue);
+        } else {
+            this.log("Error getting 'On white' characteristic. Rgbw: %s", rgbw);
+            callback(new Error("Error getting 'On white'."));
+        }
+    }
+
+
+    onSetWhiteOnState(turnOn, callback) {
+        // We should only handle turn OFF
+        if (!turnOn) {
+            this.log("Setting 'On white' characteristic to %s ...", turnOn);
+            const newWhite = 0;
+            this.sendSetSimpleRgbStateCommand(this._getRgbAsHsv(), newWhite, callback);
+        } else {
+            callback(null); // success
+        }
+    }
+
+    onGetWhiteBrightness(callback) {
+        this.log("Getting 'Brightness white' characteristic ...");
+        const rgbw = this.getRgbw();
+        if (this.isResponding() && rgbw) {
+            const currentWhiteBrightnessValue = this.getWhiteBrightnessValue();
+            this.log("Current 'Brightness white' characteristic is %s", currentWhiteBrightnessValue);
+            callback(null, currentWhiteBrightnessValue);
+        } else {
+            this.log("Error getting 'Brightness white' characteristic. Rgbw: %s", rgbw);
+            callback(new Error("Error getting 'Brightness white'."));
+        }
+    }
+
+    onSetWhiteBrightness(brightness, callback) {
+        this.log("Setting 'Brightness white' characteristic to %s ...", brightness);
+        this.sendSetSimpleRgbStateCommand(this._getRgbAsHsv(), brightness, callback);
+    }
+
 }
 
-WLightBoxAccessoryWrapper.prototype = Object.create(AbstractBoxWrapper.prototype);
 
-WLightBoxAccessoryWrapper.prototype.checkSpecificState = function () {
-    var self = this;
-    communication.send(bleboxCommands.getRgbwState, self.deviceIp, {
-        onSuccess: function (rgbwState) {
-            if (rgbwState) {
-                self.badRequestsCounter = 0;
-                rgbwState = rgbwState.rgbw || rgbwState;
-                self.rgbw = rgbwState;
-                self.setDesiredColorsAndUpdateCharacteristics();
-            }
-        }, onError: function () {
-            self.badRequestsCounter++;
-        }
-    });
-};
-
-WLightBoxAccessoryWrapper.prototype.onDeviceNameChange = function () {
-    this.accessory.getService(this.lightBulbService)
-        .updateCharacteristic(this.nameCharacteristic, this.deviceName);
-};
-
-
-WLightBoxAccessoryWrapper.prototype.sendSetSimpleRgbStateCommand = function (callback, errorMsg) {
-    var newValue = colorHelper.rgbToHex(colorHelper.hsvToRgb(this.desiredHSVColor)).substring(1, 7) + colorHelper.toHex(this.desiredWhite / 100 * 255);
-    var self = this;
-    communication.send(bleboxCommands.setSimpleRgbwState, this.deviceIp, {
-        params: [newValue],
-        onSuccess: function (rgbwState) {
-            if (rgbwState) {
-                self.rgbw = rgbwState.rgbw || rgbwState;
-                self.setDesiredColorsAndUpdateCharacteristics();
-                callback(null); // success
-            } else {
-                callback(new Error(errorMsg));
-            }
-        },
-        onError: function () {
-            callback(new Error(errorMsg));
-        }
-    });
-};
-
-WLightBoxAccessoryWrapper.prototype.setDesiredColorsAndUpdateCharacteristics = function () {
-    if (this.rgbw && this.rgbw.desiredColor) {
-        this.desiredHSVColor = colorHelper.rgbToHsv(colorHelper.hexToRgb(this.rgbw.desiredColor.substring(0, 6)));
-        this.desiredWhite = Number((parseInt(this.rgbw.desiredColor.substring(6, 8), 16) / 255 * 100).toFixed(0));
-
-        //update characteristics
-        var isRgbOn = this.desiredHSVColor.v !== 0;
-        this.accessory.getServiceByUUIDAndSubType(this.lightBulbService, this.rgbServiceSubtype)
-            .updateCharacteristic(this.onCharacteristic, isRgbOn);
-
-        this.accessory.getServiceByUUIDAndSubType(this.lightBulbService, this.rgbServiceSubtype)
-            .updateCharacteristic(this.hueCharacteristic, this.desiredHSVColor.h);
-
-        this.accessory.getServiceByUUIDAndSubType(this.lightBulbService, this.rgbServiceSubtype)
-            .updateCharacteristic(this.saturationCharacteristic, this.desiredHSVColor.s);
-
-        this.accessory.getServiceByUUIDAndSubType(this.lightBulbService, this.rgbServiceSubtype)
-            .updateCharacteristic(this.brightnessCharacteristic, this.desiredHSVColor.v);
-
-        var isWhiteOn = this.desiredWhite !== 0;
-        this.accessory.getServiceByUUIDAndSubType(this.lightBulbService, this.whiteServiceSubtype)
-            .updateCharacteristic(this.onCharacteristic, isWhiteOn);
-
-        this.accessory.getServiceByUUIDAndSubType(this.lightBulbService, this.whiteServiceSubtype)
-            .updateCharacteristic(this.brightnessCharacteristic, this.desiredWhite);
+module.exports = {
+    type: WLIGHTBOX_TYPE,
+    checkStateCommand: bleboxCommands.getRgbwState,
+    create: function (accessory, log, api, deviceInfo, stateInfo) {
+        return new WLightBoxAccessoryWrapper(accessory, log, api, deviceInfo, stateInfo);
+    }, restore: function (accessory, log, api) {
+        return new WLightBoxAccessoryWrapper(accessory, log, api);
     }
-};
-
-WLightBoxAccessoryWrapper.prototype.getRgbOnState = function (callback) {
-    this.log("WLIGHTBOX ( %s ): Getting 'On' characteristic ...", this.deviceName);
-    if (this.isResponding() && this.desiredHSVColor) {
-        var currentOnValue = this.desiredHSVColor.v !== 0;
-        this.log("WLIGHTBOX ( %s ): Current 'On' characteristic is %s", this.deviceName, currentOnValue);
-        callback(null, currentOnValue);
-    } else {
-        this.log("WLIGHTBOX ( %s ): Error getting 'On' characteristic. Rgbw: %s", this.deviceName, this.rgbw);
-        callback(new Error("Error getting 'On'."));
-    }
-};
-
-WLightBoxAccessoryWrapper.prototype.setRgbOnState = function (turnOn, callback) {
-    if (!turnOn) {
-        this.log("WLIGHTBOX ( %s ): Setting 'On' characteristic to %s ...", this.deviceName, turnOn);
-        this.desiredHSVColor.h = 0;
-        this.desiredHSVColor.s = 0;
-        this.desiredHSVColor.v = 0;
-        this.sendSetSimpleRgbStateCommand(callback, "Error setting 'On'.");
-    } else {
-        callback(null)
-    }
-
-};
-
-WLightBoxAccessoryWrapper.prototype.getRgbBrightness = function (callback) {
-    this.log("WLIGHTBOX ( %s ): Getting 'Brightness' characteristic ...", this.deviceName);
-    if (this.isResponding() && this.desiredHSVColor) {
-        this.log("WLIGHTBOX ( %s ): Current 'Brightness' characteristic is %s", this.deviceName, this.desiredHSVColor.v);
-        callback(null, this.desiredHSVColor.v);
-    } else {
-        this.log("WLIGHTBOX ( %s ): Error getting 'Brightness' characteristic. Rgbw: %s", this.deviceName, this.rgbw);
-        callback(new Error("Error getting 'Brightness'."));
-    }
-};
-
-WLightBoxAccessoryWrapper.prototype.setRgbBrightness = function (brightness, callback) {
-    this.log("WLIGHTBOX ( %s ): Setting 'Brightness' characteristic to %s ...", this.deviceName, brightness);
-    this.desiredHSVColor.v = brightness;
-    this.sendSetSimpleRgbStateCommand(callback, "Error setting 'Brightness'.");
-};
-
-WLightBoxAccessoryWrapper.prototype.getRgbHue = function (callback) {
-    this.log("WLIGHTBOX ( %s ): Getting 'Hue' characteristic ...", this.deviceName);
-    if (this.isResponding() && this.desiredHSVColor) {
-        this.log("WLIGHTBOX ( %s ): Current 'Hue' characteristic is %s", this.deviceName, this.desiredHSVColor.h);
-        callback(null, this.desiredHSVColor.h);
-    } else {
-        this.log("WLIGHTBOX ( %s ): Error getting 'Hue' characteristic. Rgbw: %s", this.deviceName, this.rgbw);
-        callback(new Error("Error getting 'Hue'."));
-    }
-};
-
-WLightBoxAccessoryWrapper.prototype.setRgbHue = function (hue, callback) {
-    this.log("WLIGHTBOX ( %s ): Setting 'Hue' characteristic to %s ...", this.deviceName, hue);
-    this.desiredHSVColor.h = hue;
-    this.desiredHSVColor.v = this.desiredHSVColor.v || 100;
-    this.sendSetSimpleRgbStateCommand(callback, "Error setting 'Hue'.");
-};
-
-WLightBoxAccessoryWrapper.prototype.getRgbSaturation = function (callback) {
-    this.log("WLIGHTBOX ( %s ): Getting 'Saturation' characteristic ...", this.deviceName);
-    if (this.isResponding() && this.desiredHSVColor) {
-        this.log("WLIGHTBOX ( %s ): Current 'Saturation' characteristic is %s", this.deviceName, this.desiredHSVColor.s);
-        callback(null, this.desiredHSVColor.s);
-    } else {
-        this.log("WLIGHTBOX ( %s ): Error getting 'Saturation' characteristic. Rgbw: %s", this.deviceName, this.rgbw);
-        callback(new Error("Error getting 'Saturation'."));
-    }
-};
-
-WLightBoxAccessoryWrapper.prototype.setRgbSaturation = function (saturation, callback) {
-    this.log("WLIGHTBOX ( %s ): Setting 'Saturation' characteristic to %s ...", this.deviceName, saturation);
-    this.desiredHSVColor.s = saturation;
-    this.desiredHSVColor.v = this.desiredHSVColor.v || 100;
-    this.sendSetSimpleRgbStateCommand(callback, "Error setting 'Saturation'.");
-};
-
-WLightBoxAccessoryWrapper.prototype.getWhiteOnState = function (callback) {
-    this.log("WLIGHTBOX ( %s ): Getting 'On white' characteristic ...", this.deviceName);
-    if (this.isResponding()) {
-        var isOn = this.desiredWhite !== 0;
-        this.log("WLIGHTBOX ( %s ): Current 'On white' characteristic is %s", this.deviceName, isOn);
-        callback(null, isOn);
-    } else {
-        this.log("WLIGHTBOX ( %s ): Error getting 'On white' characteristic. Rgbw: %s", this.deviceName, this.rgbw);
-        callback(new Error("Error getting 'On white'."));
-    }
-};
-
-WLightBoxAccessoryWrapper.prototype.setWhiteOnState = function (turnOn, callback) {
-    // Turning on option is handled by @setWhiteBrightness
-    if (!turnOn) {
-        this.log("WLIGHTBOX ( %s ): Setting 'On white' characteristic to %s ...", this.deviceName, turnOn);
-        this.desiredWhite = turnOn ? 100 : 0;
-        this.sendSetSimpleRgbStateCommand(callback, "Error setting 'On white'.");
-    } else {
-        callback(null); // success
-    }
-};
-
-WLightBoxAccessoryWrapper.prototype.getWhiteBrightness = function (callback) {
-    this.log("WLIGHTBOX ( %s ): Getting 'Brightness white' characteristic ...", this.deviceName);
-    if (this.isResponding()) {
-        var currentBrightness = this.desiredWhite || 0;
-        this.log("WLIGHTBOX ( %s ): Current 'Brightness white' characteristic is %s", this.deviceName, currentBrightness);
-        callback(null, currentBrightness);
-    } else {
-        this.log("WLIGHTBOX ( %s ): Error getting 'Brightness white' characteristic. Rgbw: %s", this.deviceName, this.rgbw);
-        callback(new Error("Error getting 'Brightness white'."));
-    }
-};
-
-WLightBoxAccessoryWrapper.prototype.setWhiteBrightness = function (brightness, callback) {
-    this.log("WLIGHTBOX ( %s ): Setting 'Brightness white' characteristic to %s ...", this.deviceName, brightness);
-    this.desiredWhite = brightness;
-    this.sendSetSimpleRgbStateCommand(callback, "Error setting 'Brightness white'.");
 };

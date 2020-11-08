@@ -1,174 +1,117 @@
-var communication = require("../common/communication");
-var bleboxCommands = require("../common/bleboxCommands");
-var SWITCHBOXD_TYPE = require("../common/bleboxConst").BLEBOX_TYPE.SWITCHBOXD;
-var AbstractBoxWrapper = require("./abstractBox");
+const communication = require("../common/communication");
+const bleboxCommands = require("../common/bleboxCommands");
+const SWITCHBOXD_TYPE = require("../common/bleboxConst").BLEBOX_TYPE.SWITCHBOXD;
+const AbstractBoxWrapper = require("./abstractBox");
 
-module.exports = {
-    create: function (homebridge, log, api, deviceInfo, relaysInfo) {
-        return new SwitchBoxDAccessoryWrapper(homebridge, null, log, api, deviceInfo, relaysInfo);
-    }, restore: function (accessory, log, api, deviceInfo) {
-        return new SwitchBoxDAccessoryWrapper(null, accessory, log, api, deviceInfo.device, deviceInfo.relays);
-    }
-};
+class SwitchBoxDAccessoryWrapper extends AbstractBoxWrapper {
+    constructor(accessory, log, api, deviceInfo, stateInfo) {
+        super(accessory, log, api);
 
-function SwitchBoxDAccessoryWrapper(homebridge, accessory, log, api, deviceInfo, relaysInfo) {
-    AbstractBoxWrapper.call(this, accessory, log, deviceInfo);
-    this.relays = relaysInfo ? (relaysInfo.relays || relaysInfo) : null;
+        this.type = SWITCHBOXD_TYPE;
+        this.checkStateCommand = bleboxCommands.getRelayState;
 
-    this.firstServiceSubtype = "Output 1";
-    this.secondServiceSubtype = "Output 2";
+        this.servicesDefList = [api.hap.Service.Switch, api.hap.Service.Switch];
+        this.servicesSubTypes = ['Output 1', 'Output 2'];
 
-    this.nameCharacteristic = api.hap.Characteristic.Name;
-    this.onCharacteristic = api.hap.Characteristic.On;
-    this.switchService = api.hap.Service.Switch;
+        this.onCharacteristic = api.hap.Characteristic.On;
 
-    if (!this.accessory) {
-        var uuid = homebridge.hap.uuid.generate(this.deviceName + SWITCHBOXD_TYPE + this.deviceIp);
-        this.accessory = new homebridge.platformAccessory(this.deviceName, uuid);
-        this.firstServiceName = this.getServiceName(0);
-        this.accessory.addService(this.switchService, this.firstServiceName, this.firstServiceSubtype);
+        this.init(this.servicesDefList, this.servicesSubTypes, deviceInfo, stateInfo);
 
-        this.secondServiceName = this.getServiceName(1);
-        this.accessory.addService(this.switchService, this.secondServiceName, this.secondServiceSubtype);
+        this.assignCharacteristics();
+
+        this.startListening();
     }
 
-    this.accessory.getServiceByUUIDAndSubType(this.switchService, this.firstServiceSubtype)
-        .getCharacteristic(this.onCharacteristic)
-        .on('get', this.getOnState.bind(this, 0))
-        .on('set', this.setOnState.bind(this, 0));
+    assignCharacteristics() {
+        super.assignCharacteristics();
+        for (let i = 1; i < this.accessory.services.length; i++) {
+            const service = this.accessory.services[i];
+            const serviceNumber = i - 1;
+            service.getCharacteristic(this.onCharacteristic)
+                .on('get', this.onGetOnState.bind(this, serviceNumber))
+                .on('set', this.onSetOnState.bind(this, serviceNumber));
+        }
+    }
 
-    this.accessory.getServiceByUUIDAndSubType(this.switchService, this.firstServiceSubtype)
-        .getCharacteristic(this.nameCharacteristic)
-        .on('get', this.getName.bind(this, 0));
-
-    this.accessory.getServiceByUUIDAndSubType(this.switchService, this.secondServiceSubtype)
-        .getCharacteristic(this.onCharacteristic)
-        .on('get', this.getOnState.bind(this, 1))
-        .on('set', this.setOnState.bind(this, 1));
-
-    this.accessory.getServiceByUUIDAndSubType(this.switchService, this.secondServiceSubtype)
-        .getCharacteristic(this.nameCharacteristic)
-        .on('get', this.getName.bind(this, 1));
-
-    //for restore purpose
-    this.accessory.context.blebox = {
-        "type": SWITCHBOXD_TYPE,
-        "device": {
-            "id": this.deviceId,
-            "ip": this.deviceIp,
-            "deviceName": this.deviceName
-        }, "relays": this.relays
+    updateStateInfoCharacteristics() {
+        const relays = this.getRelays();
+        if (relays) {
+            for (let i = 1; i < this.accessory.services.length; i++) {
+                const service = this.accessory.services[i];
+                const serviceNumber = i - 1;
+                service.updateCharacteristic(this.onCharacteristic, this.getCurrentRelayValue(serviceNumber));
+            }
+        }
     };
 
-    this.updateCharacteristics();
-    this.startListening();
-}
-
-SwitchBoxDAccessoryWrapper.prototype = Object.create(AbstractBoxWrapper.prototype);
-
-SwitchBoxDAccessoryWrapper.prototype.checkSpecificState = function () {
-    var self = this;
-    communication.send(bleboxCommands.getRelayState, self.deviceIp, {
-        onSuccess: function (relayState) {
-            if (relayState) {
-                self.badRequestsCounter = 0;
-                relayState = relayState.relays || relayState;
-                self.relays = relayState;
-                self.updateCharacteristics();
-            }
-        }, onError: function () {
-            self.badRequestsCounter++;
-        }
-    });
-};
-
-SwitchBoxDAccessoryWrapper.prototype.updateCharacteristics = function () {
-    if (this.relays) {
-        //update characteristics
-        this.accessory.getServiceByUUIDAndSubType(this.switchService, this.firstServiceSubtype)
-            .updateCharacteristic(this.onCharacteristic, this.getCurrentRelayValue(0));
-
-        this.accessory.getServiceByUUIDAndSubType(this.switchService, this.secondServiceSubtype)
-            .updateCharacteristic(this.onCharacteristic, this.getCurrentRelayValue(1));
-    }
-};
-
-SwitchBoxDAccessoryWrapper.prototype.onDeviceNameChange = function () {
-    this.accessory.getServiceByUUIDAndSubType(this.switchService, this.firstServiceSubtype)
-        .updateCharacteristic(this.nameCharacteristic, this.getServiceName(0));
-
-    this.accessory.getServiceByUUIDAndSubType(this.switchService, this.secondServiceSubtype)
-        .updateCharacteristic(this.nameCharacteristic, this.getServiceName(1));
-};
-
-SwitchBoxDAccessoryWrapper.prototype.getServiceName = function (relayNumber) {
-    var name_postfix = "";
-    if (this.relays && this.relays.length > relayNumber && this.relays[relayNumber].name) {
-        name_postfix = this.relays[relayNumber].name;
-    } else {
-        switch (relayNumber) {
-            case 0:
-                name_postfix = this.firstServiceSubtype;
-                break;
-            case 1:
-            default:
-                name_postfix = this.secondServiceSubtype;
-                break;
+    updateStateInfo(stateInfo) {
+        if (stateInfo) {
+            this.accessory.context.blebox.relays = stateInfo.relays || stateInfo;
+            this.updateStateInfoCharacteristics();
         }
     }
 
-    return this.deviceName + " " + name_postfix;
-};
-
-SwitchBoxDAccessoryWrapper.prototype.getCurrentRelayValue = function (relayNumber) {
-    var result = false;
-    if (this.relays && this.relays.length > relayNumber) {
-        result = !!this.relays[relayNumber].state
+    getRelays() {
+        return this.accessory.context.blebox.relays;
     }
-    return result;
-};
 
-SwitchBoxDAccessoryWrapper.prototype.getOnState = function (relayNumber, callback) {
-    this.log("SWITCHBOXD ( %s ): Getting 'On' characteristic ...", this.deviceName);
-    if (this.isResponding()) {
-        var value = this.getCurrentRelayValue(relayNumber);
-        this.log("SWITCHBOXD ( %s ): Current 'On' characteristic is %s", this.deviceName, value);
-        callback(null, value);
-    } else {
-        this.log("SWITCHBOXD ( %s ): Error getting 'On' characteristic. Relays: %s", this.deviceName, this.relays);
-        callback(new Error("Error getting 'On'."));
+    getServiceName(serviceNumber) {
+        const serviceName = super.getServiceName(serviceNumber);
+        const suffix = this.getServiceNameSuffix(serviceNumber);
+        return `${serviceName} ${suffix}`;
     }
-};
 
-SwitchBoxDAccessoryWrapper.prototype.setOnState = function (relayNumber, turnOn, callback) {
-    this.log("SWITCHBOXD ( %s ): Setting 'On' characteristic to %s ...", this.deviceName, turnOn);
-    var onOffParam = (turnOn ? "1" : "0");
-    var self = this;
-    communication.send(bleboxCommands.setSimpleRelaysState, this.deviceIp, {
-        params: [relayNumber, onOffParam],
-        onSuccess: function (relayState) {
-            if (relayState) {
-                self.relays = relayState.relays || relayState;
-                self.updateCharacteristics();
+    getServiceNameSuffix(serviceNumber) {
+        const relays = this.getRelays() || [];
+        const {name = this.servicesSubTypes[serviceNumber]} = relays[serviceNumber] || {};
+        return name;
+    }
+
+    getCurrentRelayValue(serviceNumber) {
+        const relays = this.getRelays() || [];
+        const {state = false} = relays[serviceNumber] || {};
+        return !!state;
+    };
+
+    onGetOnState(serviceNumber, callback) {
+        this.log("Getting 'On' characteristic ...");
+        const relays = this.getRelays();
+        if (this.isResponding() && relays) {
+            const value = this.getCurrentRelayValue(serviceNumber);
+            this.log("Current 'On' characteristic is %s", value);
+            callback(null, value);
+        } else {
+            this.log("Error getting 'On' characteristic. Relays: %s", relays);
+            callback(new Error("Error getting 'On'."));
+        }
+    };
+
+    onSetOnState(serviceNumber, turnOn, callback) {
+        this.log("Setting 'On' characteristic to %s ...", turnOn);
+        const onOffParam = (turnOn ? "1" : "0");
+        const device = this.getDevice();
+        const self = this;
+        communication.send(bleboxCommands.setSimpleRelaysState, device.ip, {
+            params: [serviceNumber, onOffParam],
+            onSuccess: function (stateInfo) {
+                self.updateStateInfo(stateInfo);
                 callback(null); // success
-            } else {
+            },
+            onError: function () {
                 callback(new Error("Error setting 'On'."));
             }
-        },
-        onError: function () {
-            callback(new Error("Error setting 'On'."));
-        }
-    });
-};
+        });
+    };
 
-SwitchBoxDAccessoryWrapper.prototype.getName = function (relayNumber, callback) {
-    this.log("SWITCHBOXD( %s ): Getting 'name' characteristic ...", this.deviceName);
-    if (this.isResponding() && this.deviceName) {
-        var currentName = this.getServiceName(relayNumber);
-        this.log("SWITCHBOXD( %s ): Current 'name' characteristic is %s", this.deviceName, currentName);
-        callback(null, currentName);
-    } else {
-        this.log("SWITCHBOXD( %s ): Error getting 'name' characteristic. Name: %s", this.deviceName, this.deviceName);
-        callback(new Error("Error getting 'name'."));
+}
+
+
+module.exports = {
+    type: SWITCHBOXD_TYPE,
+    checkStateCommand: bleboxCommands.getRelayState,
+    create: function (accessory, log, api, deviceInfo, stateInfo) {
+        return new SwitchBoxDAccessoryWrapper(accessory, log, api, deviceInfo, stateInfo);
+    }, restore: function (accessory, log, api) {
+        return new SwitchBoxDAccessoryWrapper(accessory, log, api);
     }
 };

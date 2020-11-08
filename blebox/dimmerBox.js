@@ -1,151 +1,142 @@
-var communication = require("../common/communication");
-var bleboxCommands = require("../common/bleboxCommands");
-var DIMMERBOX_TYPE = require("../common/bleboxConst").BLEBOX_TYPE.DIMMERBOX;
-var AbstractBoxWrapper = require("./abstractBox");
+const communication = require("../common/communication");
+const bleboxCommands = require("../common/bleboxCommands");
+const DIMMERBOX_TYPE = require("../common/bleboxConst").BLEBOX_TYPE.DIMMERBOX;
+const AbstractBoxWrapper = require("./abstractBox");
 
-module.exports = {
-    create: function (homebridge, log, api, deviceInfo, dimmerInfo) {
-        return new DimmerBoxAccessoryWrapper(homebridge, null, log, api, deviceInfo, dimmerInfo);
-    }, restore: function (accessory, log, api, deviceInfo) {
-        return new DimmerBoxAccessoryWrapper(null, accessory, log, api, deviceInfo.device, deviceInfo.dimmer);
-    }
-};
+class DimmerBoxAccessoryWrapper extends AbstractBoxWrapper {
+    constructor(accessory, log, api, deviceInfo, stateInfo) {
+        super(accessory, log, api);
 
-function DimmerBoxAccessoryWrapper(homebridge, accessory, log, api, deviceInfo, dimmerInfo) {
-    AbstractBoxWrapper.call(this, accessory, log, deviceInfo);
-    this.dimmer = dimmerInfo ? (dimmerInfo.dimmer || dimmerInfo) : null;
+        this.type = DIMMERBOX_TYPE;
+        this.checkStateCommand = bleboxCommands.getDimmerState;
 
-    this.nameCharacteristic = api.hap.Characteristic.Name;
-    this.onCharacteristic = api.hap.Characteristic.On;
-    this.brightnessCharacteristic = api.hap.Characteristic.Brightness;
-    this.lightBulbService = api.hap.Service.Lightbulb;
+        this.servicesDefList = [api.hap.Service.Lightbulb];
+        this.servicesSubTypes = [];
 
-    if (!this.accessory) {
-        var uuid = homebridge.hap.uuid.generate(this.deviceName + DIMMERBOX_TYPE + this.deviceIp);
-        this.accessory = new homebridge.platformAccessory(this.deviceName, uuid);
-        this.accessory.addService(this.lightBulbService, this.deviceName);
+        this.onCharacteristic = api.hap.Characteristic.On;
+        this.brightnessCharacteristic = api.hap.Characteristic.Brightness;
+
+        this.init(this.servicesDefList, this.servicesSubTypes, deviceInfo, stateInfo);
+
+        this.assignCharacteristics();
+
+        this.startListening();
     }
 
-    this.accessory.getService(this.lightBulbService)
-        .getCharacteristic(this.onCharacteristic)
-        .on('get', this.getOnState.bind(this))
-        .on('set', this.setOnState.bind(this));
+    assignCharacteristics() {
+        super.assignCharacteristics();
+        const serviceNumber = 1;
+        const service = this.accessory.services[serviceNumber];
 
-    this.accessory.getService(this.lightBulbService)
-        .getCharacteristic(this.brightnessCharacteristic)
-        .on('get', this.getBrightness.bind(this))
-        .on('set', this.setBrightness.bind(this));
+        service.getCharacteristic(this.onCharacteristic)
+            .on('get', this.onGetOnState.bind(this))
+            .on('set', this.onSetOnState.bind(this));
 
-    this.accessory.getService(this.lightBulbService)
-        .getCharacteristic(this.nameCharacteristic)
-        .on('get', this.getName.bind(this));
+        service.getCharacteristic(this.brightnessCharacteristic)
+            .on('get', this.onGetBrightness.bind(this))
+            .on('set', this.onSetBrightness.bind(this));
+    }
 
-    //for restore purpose
-    this.accessory.context.blebox = {
-        "type": DIMMERBOX_TYPE,
-        "device": {
-            "id": this.deviceId,
-            "ip": this.deviceIp,
-            "deviceName": this.deviceName
-        }, "dimmer": this.dimmer
+    updateStateInfoCharacteristics() {
+        const dimmer = this.getDimmer();
+        if (dimmer) {
+            //update characteristics
+            const serviceNumber = 1;
+            const service = this.accessory.services[serviceNumber];
+            service.updateCharacteristic(this.onCharacteristic, this.getOnState());
+            service.updateCharacteristic(this.brightnessCharacteristic, this.getBrightness());
+        }
     };
 
-    this.updateCharacteristics();
-    this.startListening();
+    updateStateInfo(stateInfo) {
+        if (stateInfo) {
+            this.accessory.context.blebox.dimmer = stateInfo.dimmer || stateInfo;
+            this.updateStateInfoCharacteristics();
+        }
+    }
+
+    getDimmer() {
+        return this.accessory.context.blebox.dimmer;
+    }
+
+    getOnState() {
+        const {desiredBrightness = 0} = this.getDimmer() || {};
+        return desiredBrightness !== 0;
+    };
+
+    getBrightness() {
+        const {desiredBrightness = 0} = this.getDimmer() || {};
+        return Number((desiredBrightness / 255 * 100).toFixed(0)) || 0;
+
+    };
+
+    onGetOnState(callback) {
+        this.log("Getting 'On' characteristic ...");
+        const dimmer = this.getDimmer();
+        if (this.isResponding() && dimmer) {
+            const currentOnValue = this.getOnState();
+            this.log("Current 'On' characteristic is %s", currentOnValue);
+            callback(null, currentOnValue);
+        } else {
+            this.log("Error getting 'On' characteristic. Dimmer: %s", dimmer);
+            callback(new Error("Error getting 'On'."));
+        }
+    };
+
+    onSetOnState(turnOn, callback) {
+        // We should handle only turn OFF
+        if (!turnOn) {
+            this.log("Setting 'On' characteristic to %s ...", turnOn);
+            const brightness = 0;
+            this.sendSetSimpleDimmerStateCommand(brightness, callback);
+        } else {
+            callback(null);
+        }
+    };
+
+    onGetBrightness(callback) {
+        this.log("Getting 'Brightness' characteristic ...");
+        const dimmer = this.getDimmer();
+        if (this.isResponding() && dimmer) {
+            const currentBrightness = this.getBrightness();
+            this.log("Current 'Brightness' characteristic is %s", currentBrightness);
+            callback(null, currentBrightness);
+        } else {
+            this.log("Error getting 'Brightness' characteristic. Dimmer: %s", dimmer);
+            callback(new Error("Error getting 'On'."));
+        }
+    };
+
+    onSetBrightness(brightness, callback) {
+        this.log("Setting 'Brightness' characteristic to %s ...", brightness);
+        const parsedBrightness = Number((brightness / 100 * 255).toFixed(0));
+        this.sendSetSimpleDimmerStateCommand(parsedBrightness, callback)
+    };
+
+    sendSetSimpleDimmerStateCommand(brightness, callback) {
+        const device = this.getDevice();
+        const self = this;
+        communication.send(bleboxCommands.setSimpleDimmerState, device.ip, {
+            params: [brightness.toString(16)],
+            onSuccess: function (stateInfo) {
+                self.updateStateInfo(stateInfo);
+                callback(null);
+            },
+            onError: function () {
+                callback(new Error("Error setting 'Target brightness'."));
+            }
+        });
+    };
+
 }
 
-DimmerBoxAccessoryWrapper.prototype = Object.create(AbstractBoxWrapper.prototype);
 
-DimmerBoxAccessoryWrapper.prototype.checkSpecificState = function () {
-    var self = this;
-    communication.send(bleboxCommands.getDimmerState, self.deviceIp, {
-        onSuccess: function (dimmerState) {
-            if (dimmerState) {
-                self.badRequestsCounter = 0;
-                dimmerState = dimmerState.dimmer || dimmerState;
-                self.dimmer = dimmerState;
-                self.updateCharacteristics();
-            }
-        }, onError: function () {
-            self.badRequestsCounter++;
-        }
-    });
-};
-
-DimmerBoxAccessoryWrapper.prototype.updateCharacteristics = function () {
-    if (this.dimmer && this.dimmer.desiredBrightness) {
-        var currentBrightness = Number((this.dimmer.desiredBrightness / 255 * 100).toFixed(0)) || 0;
-        var currentOnValue = currentBrightness !== 0;
-
-        this.accessory.getService(this.lightBulbService)
-            .updateCharacteristic(this.onCharacteristic, currentOnValue);
-
-        this.accessory.getService(this.lightBulbService)
-            .updateCharacteristic(this.brightnessCharacteristic, currentBrightness);
+module.exports = {
+    type: DIMMERBOX_TYPE,
+    checkStateCommand: bleboxCommands.getDimmerState,
+    create: function (accessory, log, api, deviceInfo, stateInfo) {
+        return new DimmerBoxAccessoryWrapper(accessory, log, api, deviceInfo, stateInfo);
+    }, restore: function (accessory, log, api) {
+        return new DimmerBoxAccessoryWrapper(accessory, log, api);
     }
-};
-
-DimmerBoxAccessoryWrapper.prototype.sendSetSimpleDimmerStateCommand = function (value, callback, errorMsg) {
-    var self = this;
-    communication.send(bleboxCommands.setSimpleDimmerState, this.deviceIp, {
-        params: [value.toString(16)],
-        onSuccess: function (dimmerState) {
-            if (dimmerState) {
-                self.dimmer = dimmerState.dimmer || dimmerState;
-                self.updateCharacteristics();
-                callback(null); // success
-            } else {
-                callback(new Error(errorMsg));
-            }
-        },
-        onError: function () {
-            callback(new Error(errorMsg));
-        }
-    });
-};
-
-DimmerBoxAccessoryWrapper.prototype.onDeviceNameChange = function () {
-    this.accessory.getService(this.lightBulbService)
-        .updateCharacteristic(this.nameCharacteristic, this.deviceName);
-};
-
-DimmerBoxAccessoryWrapper.prototype.getOnState = function (callback) {
-    this.log("DIMMERBOX ( %s ): Getting 'On' characteristic ...", this.deviceName);
-    if (this.isResponding() && this.dimmer) {
-        var currentOnValue = this.dimmer.currentBrightness !== 0;
-        this.log("DIMMERBOX ( %s ): Current 'On' characteristic is %s", this.deviceName, currentOnValue);
-        callback(null, currentOnValue);
-    } else {
-        this.log("DIMMERBOX ( %s ): Error getting 'On' characteristic. Dimmer: %s", this.deviceName, this.dimmer);
-        callback(new Error("Error getting 'On'."));
-    }
-};
-
-DimmerBoxAccessoryWrapper.prototype.setOnState = function (turnOn, callback) {
-    var currentOnValue = this.dimmer.currentBrightness !== 0;
-    if (!turnOn || !currentOnValue) {
-        this.log("DIMMERBOX ( %s ): Setting 'On' characteristic to %s ...", this.deviceName, turnOn);
-        var brightness = turnOn ? 255 : 0;
-        this.sendSetSimpleDimmerStateCommand(brightness, callback, "Error setting 'On'.");
-    } else {
-        callback(null);
-    }
-};
-
-DimmerBoxAccessoryWrapper.prototype.getBrightness = function (callback) {
-    this.log("DIMMERBOX ( %s ): Getting 'setBrightness' characteristic ...", this.deviceName);
-    if (this.isResponding() && this.dimmer) {
-        var currentBrightness = Number((this.dimmer.currentBrightness / 255 * 100).toFixed(0));
-        this.log("DIMMERBOX ( %s ): Current 'setBrightness' characteristic is %s", this.deviceName, currentBrightness);
-        callback(null, currentBrightness);
-    } else {
-        this.log("DIMMERBOX ( %s ): Error getting 'setBrightness' characteristic. Dimmer: %s", this.deviceName, this.dimmer);
-        callback(new Error("Error getting 'On'."));
-    }
-};
-
-DimmerBoxAccessoryWrapper.prototype.setBrightness = function (brightness, callback) {
-    this.log("DIMMERBOX ( %s ): Setting 'Brightness' characteristic to %s ...", this.deviceName, brightness);
-    brightness = Number((brightness / 100 * 255).toFixed(0));
-    this.sendSetSimpleDimmerStateCommand(brightness, callback, "Error setting 'setBrightness'.")
 };
