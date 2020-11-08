@@ -12,7 +12,6 @@ class SaunaBoxAccessoryWrapper extends AbstractBoxWrapper {
         this.checkStateCommand = bleboxCommands.getHeatState;
 
         this.servicesDefList = [api.hap.Service.Thermostat];
-        this.servicesSubTypes = [];
 
         this.currentHeatingCoolingStateCharacteristic = api.hap.Characteristic.CurrentHeatingCoolingState;
         this.targetHeatingCoolingStateCharacteristic = api.hap.Characteristic.TargetHeatingCoolingState;
@@ -20,7 +19,7 @@ class SaunaBoxAccessoryWrapper extends AbstractBoxWrapper {
         this.targetTemperatureCharacteristic = api.hap.Characteristic.TargetTemperature;
         this.temperatureDisplayUnitsCharacteristic = api.hap.Characteristic.TemperatureDisplayUnits;
 
-        this.init(this.servicesDefList, this.servicesSubTypes, deviceInfo, stateInfo);
+        this.init(deviceInfo, stateInfo);
 
         this.assignCharacteristics();
 
@@ -29,8 +28,8 @@ class SaunaBoxAccessoryWrapper extends AbstractBoxWrapper {
 
     assignCharacteristics() {
         super.assignCharacteristics();
-        const serviceNumber = 1;
-        const service = this.accessory.services[serviceNumber];
+        const serviceNumber = 0;
+        const service = this.getService(serviceNumber);
         service.getCharacteristic(this.currentHeatingCoolingStateCharacteristic)
             .on('get', this.onGetCurrentHeatingCoolingState.bind(this));
 
@@ -62,8 +61,8 @@ class SaunaBoxAccessoryWrapper extends AbstractBoxWrapper {
         const heat = this.getHeat();
         if (heat) {
             //update characteristics
-            const serviceNumber = 1;
-            const service = this.accessory.services[serviceNumber];
+            const serviceNumber = 0;
+            const service = this.getService(serviceNumber);
             service.updateCharacteristic(this.currentHeatingCoolingStateCharacteristic, this.getCurrentHeatingCoolingStateValue());
 
             service.updateCharacteristic(this.targetHeatingCoolingStateCharacteristic, this.getTargetHeatingCoolingStateValue());

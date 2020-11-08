@@ -12,13 +12,12 @@ class ShutterBoxAccessoryWrapper extends AbstractBoxWrapper {
         this.checkStateCommand = bleboxCommands.getShutterState;
 
         this.servicesDefList = [api.hap.Service.WindowCovering];
-        this.servicesSubTypes = [];
 
         this.currentPositionCharacteristic = api.hap.Characteristic.CurrentPosition;
         this.targetPositionCharacteristic = api.hap.Characteristic.TargetPosition;
         this.postitionStateCharacteristic = api.hap.Characteristic.PositionState;
 
-        this.init(this.servicesDefList, this.servicesSubTypes, deviceInfo, stateInfo);
+        this.init(deviceInfo, stateInfo);
 
         this.assignCharacteristics();
 
@@ -28,8 +27,8 @@ class ShutterBoxAccessoryWrapper extends AbstractBoxWrapper {
     assignCharacteristics() {
         this.log("Services: "+this.getAccessory().services.length);
         super.assignCharacteristics();
-        const serviceNumber = 1;
-        const service = this.accessory.services[serviceNumber];
+        const serviceNumber = 0;
+        const service = this.getService(serviceNumber);
         service.getCharacteristic(this.postitionStateCharacteristic)
             .on('get', this.onGetPositionState.bind(this));
 
@@ -45,8 +44,8 @@ class ShutterBoxAccessoryWrapper extends AbstractBoxWrapper {
         const shutter = this.getShutter();
         if (shutter) {
             //update characteristics
-            const serviceNumber = 1;
-            const service = this.accessory.services[serviceNumber];
+            const serviceNumber = 0;
+            const service = this.getService(serviceNumber);
             service.updateCharacteristic(this.currentPositionCharacteristic, this.getCurrentPositionValue());
 
             service.updateCharacteristic(this.targetPositionCharacteristic, this.getTargetPositionValue());

@@ -12,13 +12,12 @@ class WLightBoxSAccessoryWrapper extends AbstractBoxWrapper {
         this.checkStateCommand = bleboxCommands.Lightbulb;
 
         this.servicesDefList = [api.hap.Service.Thermostat];
-        this.servicesSubTypes = [];
 
         this.nameCharacteristic = api.hap.Characteristic.Name;
         this.onCharacteristic = api.hap.Characteristic.On;
         this.brightnessCharacteristic = api.hap.Characteristic.Brightness;
 
-        this.init(this.servicesDefList, this.servicesSubTypes, deviceInfo, stateInfo);
+        this.init(deviceInfo, stateInfo);
 
         this.assignCharacteristics();
 
@@ -27,8 +26,8 @@ class WLightBoxSAccessoryWrapper extends AbstractBoxWrapper {
 
     assignCharacteristics() {
         super.assignCharacteristics();
-        const serviceNumber = 1;
-        const service = this.accessory.services[serviceNumber];
+        const serviceNumber = 0;
+        const service = this.getService(serviceNumber);
 
         service.getCharacteristic(this.onCharacteristic)
             .on('get', this.onGetOnState.bind(this))
@@ -43,8 +42,8 @@ class WLightBoxSAccessoryWrapper extends AbstractBoxWrapper {
         const light = this.getLight();
         if (light) {
             //update characteristics
-            const serviceNumber = 1;
-            const service = this.accessory.services[serviceNumber];
+            const serviceNumber = 0;
+            const service = this.getService(serviceNumber);
             service.updateCharacteristic(this.onCharacteristic, this.getOnStateValue());
 
             service.updateCharacteristic(this.brightnessCharacteristic, this.getBrightnessValue());

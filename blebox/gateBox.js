@@ -11,13 +11,12 @@ class GateBoxAccessoryWrapper extends AbstractBoxWrapper {
         this.checkStateCommand = bleboxCommands.getGateState;
 
         this.servicesDefList = [api.hap.Service.GarageDoorOpener];
-        this.servicesSubTypes = [];
 
         this.currentDoorStateCharacteristic = api.hap.Characteristic.CurrentDoorState;
         this.targetDoorStateCharacteristic = api.hap.Characteristic.TargetDoorState;
         this.obstructionDetectedCharacteristic = api.hap.Characteristic.ObstructionDetected;
 
-        this.init(this.servicesDefList, this.servicesSubTypes, deviceInfo, stateInfo);
+        this.init(deviceInfo, stateInfo);
 
         this.assignCharacteristics();
 
@@ -26,8 +25,8 @@ class GateBoxAccessoryWrapper extends AbstractBoxWrapper {
 
     assignCharacteristics() {
         super.assignCharacteristics();
-        const serviceNumber = 1;
-        const service = this.accessory.services[serviceNumber];
+        const serviceNumber = 0;
+        const service = this.getService(serviceNumber);
 
         service.getCharacteristic(this.currentDoorStateCharacteristic)
             .on('get', this.onGetCurrentDoorState.bind(this));
@@ -45,8 +44,8 @@ class GateBoxAccessoryWrapper extends AbstractBoxWrapper {
         const gate = this.getGate();
         if (gate) {
             //update characteristics
-            const serviceNumber = 1;
-            const service = this.accessory.services[serviceNumber];
+            const serviceNumber = 0;
+            const service = this.getService(serviceNumber);
             service.updateCharacteristic(this.currentDoorStateCharacteristic, this.getCurrentDoorStateValue());
 
             service.updateCharacteristic(this.targetDoorStateCharacteristic, this.getTargetDoorStateValue());

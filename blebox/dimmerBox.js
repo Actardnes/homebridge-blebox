@@ -11,12 +11,11 @@ class DimmerBoxAccessoryWrapper extends AbstractBoxWrapper {
         this.checkStateCommand = bleboxCommands.getDimmerState;
 
         this.servicesDefList = [api.hap.Service.Lightbulb];
-        this.servicesSubTypes = [];
 
         this.onCharacteristic = api.hap.Characteristic.On;
         this.brightnessCharacteristic = api.hap.Characteristic.Brightness;
 
-        this.init(this.servicesDefList, this.servicesSubTypes, deviceInfo, stateInfo);
+        this.init(deviceInfo, stateInfo);
 
         this.assignCharacteristics();
 
@@ -25,8 +24,8 @@ class DimmerBoxAccessoryWrapper extends AbstractBoxWrapper {
 
     assignCharacteristics() {
         super.assignCharacteristics();
-        const serviceNumber = 1;
-        const service = this.accessory.services[serviceNumber];
+        const serviceNumber = 0;
+        const service = this.getService(serviceNumber);
 
         service.getCharacteristic(this.onCharacteristic)
             .on('get', this.onGetOnState.bind(this))
@@ -41,8 +40,8 @@ class DimmerBoxAccessoryWrapper extends AbstractBoxWrapper {
         const dimmer = this.getDimmer();
         if (dimmer) {
             //update characteristics
-            const serviceNumber = 1;
-            const service = this.accessory.services[serviceNumber];
+            const serviceNumber = 0;
+            const service = this.getService(serviceNumber);
             service.updateCharacteristic(this.onCharacteristic, this.getOnState());
             service.updateCharacteristic(this.brightnessCharacteristic, this.getBrightness());
         }

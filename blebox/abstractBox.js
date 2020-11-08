@@ -10,18 +10,20 @@ class AbstractAccessoryWrapper {
     constructor(accessory, log, api) {
         this._log = log;
         this.badRequestsCounter = 0;
+        this.servicesDefList = [];
+        this.servicesSubTypes = [];
 
         this.nameCharacteristic = api.hap.Characteristic.Name;
         this.accessory = accessory;
     }
 
-    init(servicesDefList, subtypes, deviceInfo, stateInfo) {
+    init(deviceInfo, stateInfo) {
         if (deviceInfo && stateInfo) {
             this.createBleboxContext();
             this.updateDeviceInfo(deviceInfo);
-            for (let serviceNumber = 0; serviceNumber < servicesDefList.length; serviceNumber++) {
-                const subType = subtypes[serviceNumber];
-                this.accessory.addService(servicesDefList[serviceNumber], this.getServiceName(serviceNumber), subType);
+            for (let serviceNumber = 0; serviceNumber < this.servicesDefList.length; serviceNumber++) {
+                const serviceSubType = this.servicesSubTypes[serviceNumber];
+                this.accessory.addService(this.servicesDefList[serviceNumber], this.getServiceName(serviceNumber), serviceSubType);
             }
             this.updateDeviceInfo(deviceInfo);
             this.updateStateInfo(stateInfo);
@@ -43,19 +45,27 @@ class AbstractAccessoryWrapper {
         this.accessory.context.blebox = this.accessory.context.blebox || {};
     }
 
+    getService(serviceNumber) {
+        const serviceDef = this.servicesDefList[serviceNumber];
+        const serviceSubType = this.servicesSubTypes[serviceNumber];
+        if (serviceSubType) {
+            return this.accessory.getServiceById(serviceDef, serviceSubType);
+        } else {
+            return this.accessory.getService(serviceDef);
+        }
+    }
+
     assignCharacteristics() {
-        for (let i = 1; i < this.accessory.services.length; i++) {
-            const service = this.accessory.services[i];
-            const serviceNumber = i - 1;
+        for (let serviceNumber = 0; serviceNumber < this.servicesDefList.length; serviceNumber++) {
+            const service = this.getService(serviceNumber);
             service.getCharacteristic(this.nameCharacteristic)
                 .on('get', this.onGetServiceName.bind(this, serviceNumber));
         }
     }
 
     updateDeviceInfoCharacteristics() {
-        for (let i = 1; i < this.accessory.services.length; i++) {
-            const service = this.accessory.services[i];
-            const serviceNumber = i - 1;
+        for (let serviceNumber = 0; serviceNumber < this.servicesDefList.length; serviceNumber++) {
+            const service = this.getService(serviceNumber);
             service.updateCharacteristic(this.nameCharacteristic, this.getServiceName(serviceNumber))
         }
     }

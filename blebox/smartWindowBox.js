@@ -25,7 +25,7 @@ class SmartWindowBoxAccessoryWrapper extends AbstractBoxWrapper {
         this.targetPositionCharacteristic = api.hap.Characteristic.TargetPosition;
         this.postitionStateCharacteristic = api.hap.Characteristic.PositionState;
 
-        this.init(this.servicesDefList, this.servicesSubTypes, deviceInfo, stateInfo);
+        this.init(deviceInfo, stateInfo);
 
         this.assignCharacteristics();
 
@@ -34,9 +34,8 @@ class SmartWindowBoxAccessoryWrapper extends AbstractBoxWrapper {
 
     assignCharacteristics() {
         super.assignCharacteristics();
-        for (let i = 1; i < this.accessory.services.length; i++) {
-            const service = this.accessory.services[i];
-            const serviceNumber = i - 1;
+        for (let serviceNumber = 0; serviceNumber < this.servicesDefList.length; serviceNumber++) {
+            const service = this.getService(serviceNumber);
             service.getCharacteristic(this.postitionStateCharacteristic)
                 .on('get', this.onGetPositionState.bind(this, serviceNumber));
 
@@ -52,9 +51,8 @@ class SmartWindowBoxAccessoryWrapper extends AbstractBoxWrapper {
     updateStateInfoCharacteristics() {
         const window = this.getWindow();
         if (window) {
-            for (let i = 1; i < this.accessory.services.length; i++) {
-                const service = this.accessory.services[i];
-                const serviceNumber = i - 1;
+            for (let serviceNumber = 0; serviceNumber < this.servicesDefList.length; serviceNumber++) {
+                const service = this.getService(serviceNumber);
                 service.updateCharacteristic(this.currentPositionCharacteristic, this.getCurrentPositionValue(serviceNumber));
 
                 service.updateCharacteristic(this.targetPositionCharacteristic, this.getTargetPositionValue(serviceNumber));

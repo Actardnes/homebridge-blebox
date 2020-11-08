@@ -22,7 +22,7 @@ class WLightBoxAccessoryWrapper extends AbstractBoxWrapper {
 
         this.desiredHsv = {h: 0, s: 0, v: 0};
 
-        this.init(this.servicesDefList, this.servicesSubTypes, deviceInfo, stateInfo);
+        this.init(deviceInfo, stateInfo);
 
         this.assignCharacteristics();
 
@@ -31,8 +31,8 @@ class WLightBoxAccessoryWrapper extends AbstractBoxWrapper {
 
     assignCharacteristics() {
         super.assignCharacteristics();
-        const rgbServiceNumber = 1;
-        const rgbService = this.accessory.services[rgbServiceNumber];
+        const rgbServiceNumber = 0;
+        const rgbService = this.getService(rgbServiceNumber);
         rgbService.getCharacteristic(this.onCharacteristic)
             .on('get', this.onGetRgbOnState.bind(this))
             .on('set', this.onSetRgbOnState.bind(this));
@@ -49,8 +49,8 @@ class WLightBoxAccessoryWrapper extends AbstractBoxWrapper {
             .on('get', this.onGetRgbSaturation.bind(this))
             .on('set', this.onSetRgbSaturation.bind(this));
 
-        const whiteServiceNumber = 2;
-        const whiteService = this.accessory.services[whiteServiceNumber];
+        const whiteServiceNumber = 1;
+        const whiteService = this.getService(whiteServiceNumber);
         whiteService.getCharacteristic(this.onCharacteristic)
             .on('get', this.onGetWhiteOnState.bind(this))
             .on('set', this.onSetWhiteOnState.bind(this));
@@ -64,8 +64,8 @@ class WLightBoxAccessoryWrapper extends AbstractBoxWrapper {
         const rgbw = this.getRgbw();
         if (rgbw) {
             //update characteristics
-            const rgbServiceNumber = 1;
-            const rgbService = this.accessory.services[rgbServiceNumber];
+            const rgbServiceNumber = 0;
+            const rgbService = this.getService(rgbServiceNumber);
             rgbService.updateCharacteristic(this.onCharacteristic, this.getRgbOnValue());
 
             rgbService.updateCharacteristic(this.hueCharacteristic, this.getRgbHueValue());
@@ -74,8 +74,8 @@ class WLightBoxAccessoryWrapper extends AbstractBoxWrapper {
 
             rgbService.updateCharacteristic(this.brightnessCharacteristic, this.getRgbBrightnessValue());
 
-            const whiteServiceNumber = 2;
-            const whiteService = this.accessory.services[whiteServiceNumber];
+            const whiteServiceNumber = 1;
+            const whiteService = this.getService(whiteServiceNumber);
             whiteService.updateCharacteristic(this.onCharacteristic, this.getWhiteOnValue());
 
             whiteService.updateCharacteristic(this.brightnessCharacteristic, this.getWhiteBrightnessValue());

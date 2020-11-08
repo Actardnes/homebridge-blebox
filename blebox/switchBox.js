@@ -12,11 +12,10 @@ class SwitchBoxAccessoryWrapper extends AbstractBoxWrapper {
         this.checkStateCommand = bleboxCommands.getRelayState;
 
         this.servicesDefList = [api.hap.Service.Switch];
-        this.servicesSubTypes = [];
 
         this.onCharacteristic = api.hap.Characteristic.On;
 
-        this.init(this.servicesDefList, this.servicesSubTypes, deviceInfo, stateInfo);
+        this.init(deviceInfo, stateInfo);
 
         this.assignCharacteristics();
 
@@ -25,8 +24,8 @@ class SwitchBoxAccessoryWrapper extends AbstractBoxWrapper {
 
     assignCharacteristics() {
         super.assignCharacteristics();
-        const serviceNumber = 1;
-        const service = this.accessory.services[serviceNumber];
+        const serviceNumber = 0;
+        const service = this.getService(serviceNumber);
         service.getCharacteristic(this.onCharacteristic)
             .on('get', this.onGetOnState.bind(this))
             .on('set', this.onSetOnState.bind(this));
@@ -36,8 +35,8 @@ class SwitchBoxAccessoryWrapper extends AbstractBoxWrapper {
         const relays = this.getRelays();
         if (relays) {
             //update characteristics
-            const serviceNumber = 1;
-            const service = this.accessory.services[serviceNumber];
+            const serviceNumber = 0;
+            const service = this.getService(serviceNumber);
             service.updateCharacteristic(this.onCharacteristic, this.getCurrentRelayValue());
         }
     };

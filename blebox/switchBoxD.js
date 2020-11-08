@@ -15,7 +15,7 @@ class SwitchBoxDAccessoryWrapper extends AbstractBoxWrapper {
 
         this.onCharacteristic = api.hap.Characteristic.On;
 
-        this.init(this.servicesDefList, this.servicesSubTypes, deviceInfo, stateInfo);
+        this.init(deviceInfo, stateInfo);
 
         this.assignCharacteristics();
 
@@ -24,9 +24,8 @@ class SwitchBoxDAccessoryWrapper extends AbstractBoxWrapper {
 
     assignCharacteristics() {
         super.assignCharacteristics();
-        for (let i = 1; i < this.accessory.services.length; i++) {
-            const service = this.accessory.services[i];
-            const serviceNumber = i - 1;
+        for (let serviceNumber = 0; serviceNumber < this.servicesDefList.length; serviceNumber++) {
+            const service = this.getService(serviceNumber);
             service.getCharacteristic(this.onCharacteristic)
                 .on('get', this.onGetOnState.bind(this, serviceNumber))
                 .on('set', this.onSetOnState.bind(this, serviceNumber));
@@ -36,9 +35,8 @@ class SwitchBoxDAccessoryWrapper extends AbstractBoxWrapper {
     updateStateInfoCharacteristics() {
         const relays = this.getRelays();
         if (relays) {
-            for (let i = 1; i < this.accessory.services.length; i++) {
-                const service = this.accessory.services[i];
-                const serviceNumber = i - 1;
+            for (let serviceNumber = 0; serviceNumber < this.servicesDefList.length; serviceNumber++) {
+                const service = this.getService(serviceNumber);
                 service.updateCharacteristic(this.onCharacteristic, this.getCurrentRelayValue(serviceNumber));
             }
         }
