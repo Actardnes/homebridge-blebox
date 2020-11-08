@@ -8,6 +8,7 @@ class SaunaBoxAccessoryWrapper extends AbstractBoxWrapper {
         super(accessory, log, api);
 
         this.type = SAUNABOX_TYPE;
+        this.maxTemperature = 125;
         this.checkStateCommand = bleboxCommands.getHeatState;
 
         this.servicesDefList = [api.hap.Service.Thermostat];
@@ -38,9 +39,17 @@ class SaunaBoxAccessoryWrapper extends AbstractBoxWrapper {
             .on('set', this.onSetTargetHeatingCoolingState.bind(this));
 
         service.getCharacteristic(this.currentTemperatureCharacteristic)
+            .setProps({
+                maxValue: this.maxTemperature,
+                minValue: -30,
+            })
             .on('get', this.onGetCurrentTemperature.bind(this));
 
         service.getCharacteristic(this.targetTemperatureCharacteristic)
+            .setProps({
+                maxValue: this.maxTemperature,
+                minValue: 0
+            })
             .on('get', this.onGetTargetTemperature.bind(this))
             .on('set', this.onSetTargetTemperature.bind(this));
 
