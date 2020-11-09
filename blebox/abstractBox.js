@@ -1,91 +1,181 @@
-var communication = require("../common/communication");
-var bleboxCommands = require("../common/bleboxCommands");
-var NON_ALPHANUMERIC_REGEX = /[^a-zA-Z0-9\u00C0-\u024F]/g;
+const communication = require("../common/communication");
+const bleboxCommands = require("../common/bleboxCommands");
 
-module.exports = AbstractAccessoryWrapper;
+const NON_ALPHANUMERIC_REGEX = /[^a-zA-Z0-9\u00C0-\u024F]/g;
+const maxBadRequestsCount = 4;
+const deviceInfoIntervalInMs = 30000;
+const specificStateIntervalInMs = 10000;
 
-function AbstractAccessoryWrapper(accessory, log, deviceInfo) {
-    this.log = log;
-    this.deviceId = deviceInfo.id;
+class AbstractAccessoryWrapper {
+    constructor(accessory, log, api) {
+        this._log = log;
+        this.badRequestsCounter = 0;
+        this.servicesDefList = [];
+        this.servicesSubTypes = [];
 
-    this.deviceName = deviceInfo.deviceName ? deviceInfo.deviceName.replace(NON_ALPHANUMERIC_REGEX, ' ') : "";
-    this.deviceIp = deviceInfo.ip;
-    this.badRequestsCounter = 0;
-    this.accessory = accessory;
+        this.nameCharacteristic = api.hap.Characteristic.Name;
+        this.accessory = accessory;
+    }
+
+    init(deviceInfo, stateInfo) {
+        if (deviceInfo && stateInfo) {
+            this.createBleboxContext();
+            this.updateDeviceInfo(deviceInfo);
+            for (let serviceNumber = 0; serviceNumber < this.servicesDefList.length; serviceNumber++) {
+                const serviceSubType = this.servicesSubTypes[serviceNumber];
+                this.accessory.addService(this.servicesDefList[serviceNumber], this.getServiceName(serviceNumber), serviceSubType);
+            }
+            this.updateDeviceInfo(deviceInfo);
+            this.updateStateInfo(stateInfo);
+        }
+    }
+
+    log(message) {
+        const device = this.getDevice();
+        const params = Array.prototype.slice.call(arguments, 1) || [];
+        params.unshift("%s ( %s ): " + message, this.type.toUpperCase(), device.deviceName);
+        this._log.apply(this._log, params)
+    }
+
+    getAccessory() {
+        return this.accessory;
+    };
+
+    createBleboxContext() {
+        this.accessory.context.blebox = this.accessory.context.blebox || {};
+    }
+
+    getService(serviceNumber) {
+        const serviceDef = this.servicesDefList[serviceNumber];
+        const serviceSubType = this.servicesSubTypes[serviceNumber];
+        if (serviceSubType) {
+            return this.accessory.getServiceById(serviceDef, serviceSubType);
+        } else {
+            return this.accessory.getService(serviceDef);
+        }
+    }
+
+    assignCharacteristics() {
+        for (let serviceNumber = 0; serviceNumber < this.servicesDefList.length; serviceNumber++) {
+            const service = this.getService(serviceNumber);
+            service.getCharacteristic(this.nameCharacteristic)
+                .on('get', this.onGetServiceName.bind(this, serviceNumber));
+        }
+    }
+
+    updateDeviceInfoCharacteristics() {
+        for (let serviceNumber = 0; serviceNumber < this.servicesDefList.length; serviceNumber++) {
+            const service = this.getService(serviceNumber);
+            service.updateCharacteristic(this.nameCharacteristic, this.getServiceName(serviceNumber))
+        }
+    }
+
+    updateStateInfoCharacteristics() {
+        this.log("Not supported method: updateStateInfo")
+    };
+
+    getServiceName(serviceNumber) {
+        const device = this.getDevice();
+        return device.deviceName;
+    }
+
+    onGetServiceName(serviceNumber, callback) {
+        const serviceName = this.getServiceName(serviceNumber);
+        this.log("Getting 'name' characteristic ...");
+        if (this.isResponding() && serviceName) {
+            this.log("Current 'name' characteristic is %s", serviceName);
+            callback(null, serviceName);
+        } else {
+            this.log("Error getting 'name' characteristic. Name: %s", serviceName);
+            callback(new Error("Error getting 'name'."));
+        }
+    };
+
+    parseDeviceInfo(deviceInfo) {
+        if (deviceInfo) {
+            const device = deviceInfo.device || deviceInfo;
+            if (!device.ip && deviceInfo.network) {
+                device.ip = deviceInfo.network.ip;
+            }
+            device.deviceName = device.deviceName ? device.deviceName.replace(NON_ALPHANUMERIC_REGEX, ' ') : "";
+            return device;
+        }
+    };
+
+    updateDeviceInfo(deviceInfo) {
+        const newDevice = this.parseDeviceInfo(deviceInfo);
+        if (newDevice) {
+            const device = this.getDevice();
+            this.accessory.context.blebox.device = newDevice;
+            if (device && device.deviceName !== newDevice.deviceName) {
+                this.updateDeviceInfoCharacteristics();
+            }
+        }
+    };
+
+    updateStateInfo(stateInfo) {
+        this.log("Not supported method: updateStateInfo")
+    }
+
+    getDevice() {
+        return this.accessory.context.blebox.device;
+    };
+
+    isResponding() {
+        return this.badRequestsCounter <= maxBadRequestsCount;
+    };
+
+    checkDeviceState() {
+        const device = this.getDevice();
+        const self = this;
+        communication.send(bleboxCommands.getDeviceState, device.ip, {
+            onSuccess: function (deviceInfo) {
+                const newDevice = self.parseDeviceInfo(deviceInfo)
+                if (newDevice) {
+                    if (device.id === newDevice.id) {
+                        self.badRequestsCounter = 0;
+                        self.updateDeviceInfo(deviceInfo);
+                    }
+                    // else {
+                    //     self.badRequestsCounter = maxBadRequestsCount + 1;
+                    //     self.stopListening();
+                    // }
+                }
+            }, onError: function () {
+                self.badRequestsCounter++;
+            }
+        });
+    };
+
+    checkSpecificState() {
+        const device = this.getDevice();
+        const self = this;
+        communication.send(this.checkStateCommand, device.ip, {
+            onSuccess: function (stateInfo) {
+                if (stateInfo) {
+                    self.badRequestsCounter = 0;
+                    self.updateStateInfo(stateInfo);
+                    self.updateStateInfoCharacteristics();
+                }
+            }, onError: function () {
+                self.badRequestsCounter++;
+            }
+        });
+    };
+
+    startListening() {
+        this.stopListening();
+        const randomDelay = Math.floor(Math.random() * 5000);
+        this.checkDeviceState();
+        this.deviceInfoInterval = setInterval(this.checkDeviceState.bind(this), deviceInfoIntervalInMs + randomDelay);
+        this.checkSpecificState();
+        this.specificStateInterval = setInterval(this.checkSpecificState.bind(this), specificStateIntervalInMs + randomDelay);
+    };
+
+    stopListening() {
+        clearInterval(this.deviceInfoInterval);
+        clearInterval(this.specificStateInterval);
+    };
 }
 
-AbstractAccessoryWrapper.prototype.maxBadRequestsCount = 4;
-
-AbstractAccessoryWrapper.prototype.deviceStateIntervalInMs = 30000;
-
-AbstractAccessoryWrapper.prototype.specificStateIntervalInMs = 10000;
-
-AbstractAccessoryWrapper.prototype.getAccessory = function () {
-    return this.accessory;
-};
-
-AbstractAccessoryWrapper.prototype.setDeviceIp = function (deviceInfo) {
-    this.deviceIp = deviceInfo.ip || this.deviceIp;
-    this.startListening();
-};
-
-AbstractAccessoryWrapper.prototype.isResponding = function () {
-    return this.badRequestsCounter <= this.maxBadRequestsCount;
-};
-
-AbstractAccessoryWrapper.prototype.onDeviceNameChange = function () {
-    this.log("Abstract: Device name change: %s", this.deviceName);
-};
-
-AbstractAccessoryWrapper.prototype.checkDeviceState = function () {
-    var self = this;
-    communication.send(bleboxCommands.getDeviceState, self.deviceIp, {
-        onSuccess: function (deviceInfo) {
-            if (deviceInfo) {
-                deviceInfo = deviceInfo.device || deviceInfo;
-                if (self.deviceId == deviceInfo.id) {
-                    self.badRequestsCounter = 0;
-                    if (self.deviceName != deviceInfo.deviceName) {
-                        self.deviceName = deviceInfo.deviceName ? deviceInfo.deviceName.replace(NON_ALPHANUMERIC_REGEX, ' ') : "";
-                        self.onDeviceNameChange();
-                    }
-                } else {
-                    self.badRequestsCounter = self.maxBadRequestsCount + 1;
-                    self.stopListening();
-                }
-            }
-        }, onError: function () {
-            self.badRequestsCounter++;
-        }
-    });
-};
-
-AbstractAccessoryWrapper.prototype.checkSpecificState = function () {
-    throw new Error("Method 'checkSpecificState' not implemented!");
-};
-
-AbstractAccessoryWrapper.prototype.startListening = function () {
-    this.stopListening();
-    var randomDelay = Math.floor(Math.random() * 5000);
-    this.checkDeviceState();
-    this.deviceStateInterval = setInterval(this.checkDeviceState.bind(this), this.deviceStateIntervalInMs + randomDelay);
-    this.checkSpecificState();
-    this.specificStateInterval = setInterval(this.checkSpecificState.bind(this), this.specificStateIntervalInMs + randomDelay);
-};
-
-AbstractAccessoryWrapper.prototype.stopListening = function () {
-    clearInterval(this.deviceStateInterval);
-    clearInterval(this.specificStateInterval);
-};
-
-
-AbstractAccessoryWrapper.prototype.getName = function (callback) {
-    this.log("( %s ): Getting 'name' characteristic ...", this.deviceName);
-    if (this.isResponding() && this.deviceName) {
-        this.log("( %s ): Current 'name' characteristic is %s", this.deviceName, this.deviceName);
-        callback(null, this.deviceName);
-    } else {
-        this.log("( %s ): Error getting 'name' characteristic. Name: %s", this.deviceName, this.deviceName);
-        callback(new Error("Error getting 'name'."));
-    }
-};
+module.exports = AbstractAccessoryWrapper;

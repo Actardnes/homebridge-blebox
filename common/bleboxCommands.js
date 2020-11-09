@@ -83,5 +83,20 @@ module.exports = {
         "name": "setWindowPositionPercentage",
         "method": "GET",
         "url": "/s/{0}/p/{1}"
-    }
+    },
+    "getHeatState": {
+        "name": "getHeatState",
+        "method": "GET",
+        "url": "/api/heat/state"
+    },
+    "setSimpleHeatState": {
+        "name": "setSimpleHeatState",
+        "method": "GET",
+        "url": "/s/{0}"
+    },
+    "setSimpleHeatDesiredTemperature": {
+        "name": "setSimpleHeatDesiredTemperature",
+        "method": "GET",
+        "url": "/s/t/{0}"
+    },
 };

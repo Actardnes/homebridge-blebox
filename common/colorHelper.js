@@ -126,7 +126,7 @@ module.exports = {
         rgb.b = Number(rgb.b);
         if (rgb.r > 255 || rgb.g > 255 || rgb.b > 255)
             throw "Invalid color component";
-        return "#" + ((1 << 24) + (rgb.r << 16) + (rgb.g << 8) + rgb.b).toString(16).slice(1);
+        return "" + ((1 << 24) + (rgb.r << 16) + (rgb.g << 8) + rgb.b).toString(16).slice(1);
     },
 
     hexToRgb: function (hex) {

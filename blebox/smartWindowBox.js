@@ -1,303 +1,181 @@
-var communication = require("../common/communication");
-var bleboxCommands = require("../common/bleboxCommands");
-var SMARTWINDOWBOX_TYPE = require("../common/bleboxConst").BLEBOX_TYPE.SMARTWINDOWBOX;
-var AbstractBoxWrapper = require("./abstractBox");
+const communication = require("../common/communication");
+const bleboxCommands = require("../common/bleboxCommands");
+const SMARTWINDOWBOX_TYPE = require("../common/bleboxConst").BLEBOX_TYPE.SMARTWINDOWBOX;
+const AbstractBoxWrapper = require("./abstractBox");
 
-module.exports = {
-    create: function (homebridge, log, api, deviceInfo, windowInfo) {
-        return new SmartWindowBoxAccessoryWrapper(homebridge, null, log, api, deviceInfo, windowInfo);
-    }, restore: function (accessory, log, api, deviceInfo) {
-        return new SmartWindowBoxAccessoryWrapper(null, accessory, log, api, deviceInfo.device, deviceInfo.window);
-    }
-};
+class SmartWindowBoxAccessoryWrapper extends AbstractBoxWrapper {
+    constructor(accessory, log, api, deviceInfo, stateInfo) {
+        super(accessory, log, api);
 
-function SmartWindowBoxAccessoryWrapper(homebridge, accessory, log, api, deviceInfo, windowInfo) {
-    AbstractBoxWrapper.call(this, accessory, log, deviceInfo);
-    this.window = windowInfo ? (windowInfo.window || windowInfo) : null;
+        this.type = SMARTWINDOWBOX_TYPE;
+        this.checkStateCommand = bleboxCommands.getRelayState;
 
-    this.firstServiceSubtype = "Motor 1";
-    this.secondServiceSubtype = "Motor 2";
-    this.thirdServiceSubtype = "Motor 3";
+        this.servicesDefList = [
+            api.hap.Service.WindowCovering,
+            api.hap.Service.WindowCovering,
+            api.hap.Service.WindowCovering
+        ];
+        this.servicesSubTypes = [
+            'Motor 1',
+            'Motor 2',
+            'Motor 3'
+        ];
 
-    this.nameCharacteristic = api.hap.Characteristic.Name;
-    this.currentPositionCharacteristic = api.hap.Characteristic.CurrentPosition;
-    this.targetPositionCharacteristic = api.hap.Characteristic.TargetPosition;
-    this.postitionStateCharacteristic = api.hap.Characteristic.PositionState;
-    this.windowCoveringService = api.hap.Service.WindowCovering;
+        this.currentPositionCharacteristic = api.hap.Characteristic.CurrentPosition;
+        this.targetPositionCharacteristic = api.hap.Characteristic.TargetPosition;
+        this.postitionStateCharacteristic = api.hap.Characteristic.PositionState;
 
-    if (!this.accessory) {
-        var uuid = homebridge.hap.uuid.generate(this.deviceName + SMARTWINDOWBOX_TYPE + this.deviceIp);
-        this.accessory = new homebridge.platformAccessory(this.deviceName, uuid);
+        this.init(deviceInfo, stateInfo);
 
-        this.firstServiceName = this.getServiceName(0);
-        this.accessory.addService(this.windowCoveringService, this.firstServiceName, this.firstServiceSubtype);
+        this.assignCharacteristics();
 
-        this.secondServiceName = this.getServiceName(1);
-        this.accessory.addService(this.windowCoveringService, this.secondServiceName, this.secondServiceSubtype);
-
-        this.thirdServiceName = this.getServiceName(2);
-        this.accessory.addService(this.windowCoveringService, this.thirdServiceName, this.thirdServiceSubtype);
+        this.startListening();
     }
 
-    // first service
-    this.accessory.getServiceByUUIDAndSubType(this.windowCoveringService, this.firstServiceSubtype)
-        .getCharacteristic(this.postitionStateCharacteristic)
-        .on('get', this.getPositionState.bind(this, 0));
+    assignCharacteristics() {
+        super.assignCharacteristics();
+        for (let serviceNumber = 0; serviceNumber < this.servicesDefList.length; serviceNumber++) {
+            const service = this.getService(serviceNumber);
+            service.getCharacteristic(this.postitionStateCharacteristic)
+                .on('get', this.onGetPositionState.bind(this, serviceNumber));
 
-    this.accessory.getServiceByUUIDAndSubType(this.windowCoveringService, this.firstServiceSubtype)
-        .getCharacteristic(this.currentPositionCharacteristic)
-        .on('get', this.getCurrentPosition.bind(this, 0));
+            service.getCharacteristic(this.currentPositionCharacteristic)
+                .on('get', this.onGetCurrentPosition.bind(this, serviceNumber));
 
-    this.accessory.getServiceByUUIDAndSubType(this.windowCoveringService, this.firstServiceSubtype)
-        .getCharacteristic(this.targetPositionCharacteristic)
-        .on('get', this.getTargetPosition.bind(this, 0))
-        .on('set', this.setTargetPosition.bind(this, 0));
+            service.getCharacteristic(this.targetPositionCharacteristic)
+                .on('get', this.onGetTargetPosition.bind(this, serviceNumber))
+                .on('set', this.onSetTargetPosition.bind(this, serviceNumber));
+        }
+    }
 
-    this.accessory.getServiceByUUIDAndSubType(this.windowCoveringService, this.firstServiceSubtype)
-        .getCharacteristic(this.nameCharacteristic)
-        .on('get', this.getName.bind(this, 0));
+    updateStateInfoCharacteristics() {
+        const window = this.getWindow();
+        if (window) {
+            for (let serviceNumber = 0; serviceNumber < this.servicesDefList.length; serviceNumber++) {
+                const service = this.getService(serviceNumber);
+                service.updateCharacteristic(this.currentPositionCharacteristic, this.getCurrentPositionValue(serviceNumber));
 
-    // second service
-    this.accessory.getServiceByUUIDAndSubType(this.windowCoveringService, this.secondServiceSubtype)
-        .getCharacteristic(this.postitionStateCharacteristic)
-        .on('get', this.getPositionState.bind(this, 1));
+                service.updateCharacteristic(this.targetPositionCharacteristic, this.getTargetPositionValue(serviceNumber));
 
-    this.accessory.getServiceByUUIDAndSubType(this.windowCoveringService, this.secondServiceSubtype)
-        .getCharacteristic(this.currentPositionCharacteristic)
-        .on('get', this.getCurrentPosition.bind(this, 1));
+                service.updateCharacteristic(this.postitionStateCharacteristic, this.getPositionStateValue(serviceNumber));
+            }
+        }
+    }
 
-    this.accessory.getServiceByUUIDAndSubType(this.windowCoveringService, this.secondServiceSubtype)
-        .getCharacteristic(this.targetPositionCharacteristic)
-        .on('get', this.getTargetPosition.bind(this, 1))
-        .on('set', this.setTargetPosition.bind(this, 1));
+    updateStateInfo(stateInfo) {
+        if (stateInfo) {
+            this.accessory.context.blebox.window = stateInfo.window || stateInfo;
+            this.updateStateInfoCharacteristics();
+        }
+    }
 
-    this.accessory.getServiceByUUIDAndSubType(this.windowCoveringService, this.secondServiceSubtype)
-        .getCharacteristic(this.nameCharacteristic)
-        .on('get', this.getName.bind(this, 1));
+    getWindow() {
+        return this.accessory.context.blebox.window;
+    }
 
-    // third service
-    this.accessory.getServiceByUUIDAndSubType(this.windowCoveringService, this.thirdServiceSubtype)
-        .getCharacteristic(this.postitionStateCharacteristic)
-        .on('get', this.getPositionState.bind(this, 2));
+    getServiceName(serviceNumber) {
+        const serviceName = super.getServiceName(serviceNumber);
+        const suffix = this.getServiceNameSuffix(serviceNumber);
+        return `${serviceName} ${suffix}`;
+    }
 
-    this.accessory.getServiceByUUIDAndSubType(this.windowCoveringService, this.thirdServiceSubtype)
-        .getCharacteristic(this.currentPositionCharacteristic)
-        .on('get', this.getCurrentPosition.bind(this, 2));
-
-    this.accessory.getServiceByUUIDAndSubType(this.windowCoveringService, this.thirdServiceSubtype)
-        .getCharacteristic(this.targetPositionCharacteristic)
-        .on('get', this.getTargetPosition.bind(this, 2))
-        .on('set', this.setTargetPosition.bind(this, 2));
-
-    this.accessory.getServiceByUUIDAndSubType(this.windowCoveringService, this.thirdServiceSubtype)
-        .getCharacteristic(this.nameCharacteristic)
-        .on('get', this.getName.bind(this, 2));
-
-    //for restore purpose
-    this.accessory.context.blebox = {
-        "type": SMARTWINDOWBOX_TYPE,
-        "device": {
-            "id": this.deviceId,
-            "ip": this.deviceIp,
-            "deviceName": this.deviceName
-        }, "window": this.window
+    getServiceNameSuffix(serviceNumber) {
+        const {motors = []} = this.getWindow() || {};
+        const {name = this.servicesSubTypes[serviceNumber]} = motors[serviceNumber] || {};
+        return name;
     };
 
-    this.updateCharacteristics();
-    this.startListening();
-}
-
-SmartWindowBoxAccessoryWrapper.prototype = Object.create(AbstractBoxWrapper.prototype);
-
-SmartWindowBoxAccessoryWrapper.prototype.checkSpecificState = function () {
-    var self = this;
-    communication.send(bleboxCommands.getWindowState, this.deviceIp, {
-        onSuccess: function (windowState) {
-            if (windowState) {
-                self.badRequestsCounter = 0;
-                windowState = windowState.window || windowState;
-                self.window = windowState;
-                self.updateCharacteristics();
-            }
-        }, onError: function () {
-            self.badRequestsCounter++;
-        }
-    });
-};
-
-SmartWindowBoxAccessoryWrapper.prototype.updateCharacteristics = function () {
-    if (this.window) {
-        //update characteristics
-
-        // first service
-        this.accessory.getServiceByUUIDAndSubType(this.windowCoveringService, this.firstServiceSubtype)
-            .updateCharacteristic(this.currentPositionCharacteristic, this.getCurrentPositionValue(0));
-
-        this.accessory.getServiceByUUIDAndSubType(this.windowCoveringService, this.firstServiceSubtype)
-            .updateCharacteristic(this.targetPositionCharacteristic, this.getTargetPositionValue(0));
-
-        this.accessory.getServiceByUUIDAndSubType(this.windowCoveringService, this.firstServiceSubtype)
-            .updateCharacteristic(this.postitionStateCharacteristic, this.getPositionStateValue(0));
-
-        // second service
-        this.accessory.getServiceByUUIDAndSubType(this.windowCoveringService, this.secondServiceSubtype)
-            .updateCharacteristic(this.currentPositionCharacteristic, this.getCurrentPositionValue(1));
-
-        this.accessory.getServiceByUUIDAndSubType(this.windowCoveringService, this.secondServiceSubtype)
-            .updateCharacteristic(this.targetPositionCharacteristic, this.getTargetPositionValue(1));
-
-        this.accessory.getServiceByUUIDAndSubType(this.windowCoveringService, this.secondServiceSubtype)
-            .updateCharacteristic(this.postitionStateCharacteristic, this.getPositionStateValue(1));
-
-        // third service
-        this.accessory.getServiceByUUIDAndSubType(this.windowCoveringService, this.thirdServiceSubtype)
-            .updateCharacteristic(this.currentPositionCharacteristic, this.getCurrentPositionValue(2));
-
-        this.accessory.getServiceByUUIDAndSubType(this.windowCoveringService, this.thirdServiceSubtype)
-            .updateCharacteristic(this.targetPositionCharacteristic, this.getTargetPositionValue(2));
-
-        this.accessory.getServiceByUUIDAndSubType(this.windowCoveringService, this.thirdServiceSubtype)
-            .updateCharacteristic(this.postitionStateCharacteristic, this.getPositionStateValue(2));
+    _getPositionValue(serviceNumber, positionType) {
+        const {motors = []} = this.getWindow() || {};
+        const {[positionType]: {position = 0} = {}} = motors[serviceNumber] || {};
+        return 100 - Math.min(Math.max(position, 0), 100);
     }
-};
 
-SmartWindowBoxAccessoryWrapper.prototype.getServiceName = function (motorNumber) {
-    var name_postfix = "";
-    if (this.window && this.window.motors && this.window.motors.length > motorNumber && this.window.motors[motorNumber].name) {
-        name_postfix = this.window.motors[motorNumber].name;
-    } else {
-        switch (motorNumber) {
-            case 0:
-                name_postfix = this.firstServiceSubtype;
-                break;
-            case 1:
-                name_postfix = this.secondServiceSubtype;
-                break;
-            case 2:
-            default:
-                name_postfix = this.thirdServiceSubtype;
-                break;
+    getCurrentPositionValue(serviceNumber) {
+        return this._getPositionValue(serviceNumber, 'currentPos');
+    }
+
+    getTargetPositionValue(serviceNumber) {
+        return this._getPositionValue(serviceNumber, 'desiredPos');
+    }
+
+    getPositionStateValue(serviceNumber) {
+        let positionState = this.postitionStateCharacteristic.STOPPED;
+        const {motors = []} = this.getWindow() || {};
+        const {state} = motors[serviceNumber] || {};
+        if (state === 0) { //down
+            positionState = this.postitionStateCharacteristic.DECREASING;
+        } else if (state === 1) { //up
+            positionState = this.postitionStateCharacteristic.INCREASING;
+        }
+        return positionState;
+    }
+
+    onGetCurrentPosition(serviceNumber, callback) {
+        this.log("Getting 'Current position' characteristic for motor %s ...", serviceNumber);
+        const window = this.getWindow();
+        if (this.isResponding() && window) {
+            const currentPosition = this.getCurrentPositionValue(serviceNumber);
+            this.log("Current 'Current position' characteristic for motor %s is %s", serviceNumber, currentPosition);
+
+            callback(null, currentPosition);
+        } else {
+            this.log("Error getting 'Current position' characteristic for motor %s. Window: %s", serviceNumber, window);
+            callback(new Error("Error getting 'Current position'."));
         }
     }
 
-    return this.deviceName + " " + name_postfix;
-};
+    onGetTargetPosition(serviceNumber, callback) {
+        this.log("Getting 'Target position' characteristic for motor %s ...", serviceNumber);
+        const window = this.getWindow();
+        if (this.isResponding() && window) {
+            const currentPosition = this.getTargetPositionValue(serviceNumber);
+            this.log("Current 'Target position' characteristic for motor %s is %s", serviceNumber, currentPosition);
 
-SmartWindowBoxAccessoryWrapper.prototype.getCurrentPositionValue = function (motorNumber) {
-    var currentPosition = 0;
-    if (this.window && this.window.motors && this.window.motors[motorNumber] && this.window.motors[motorNumber].currentPos) {
-        currentPosition = Number(this.window.motors[motorNumber].currentPos.position) || 0;
-        currentPosition = 100 - Math.min(Math.max(currentPosition, 0), 100);
-    }
-    return currentPosition;
-};
-
-SmartWindowBoxAccessoryWrapper.prototype.getTargetPositionValue = function (motorNumber) {
-    var targetPosition = 0;
-    if (this.window && this.window.motors && this.window.motors[motorNumber] && this.window.motors[motorNumber].desiredPos) {
-        targetPosition = Number(this.window.motors[motorNumber].desiredPos.position) || 0;
-        targetPosition = 100 - Math.min(Math.max(targetPosition, 0), 100);
-    }
-    return targetPosition;
-};
-
-SmartWindowBoxAccessoryWrapper.prototype.getPositionStateValue = function (motorNumber) {
-    var positionState = this.postitionStateCharacteristic.STOPPED;
-    if (this.window && this.window.motors && this.window.motors[motorNumber]) {
-        switch (this.window.motors[motorNumber].state) {
-            case 0: //down
-                positionState = this.postitionStateCharacteristic.DECREASING;
-                break;
-            case 1: // up
-                positionState = this.postitionStateCharacteristic.INCREASING;
-                break;
-            default:
-                positionState = this.postitionStateCharacteristic.STOPPED;
-                break;
+            callback(null, currentPosition);
+        } else {
+            this.log("Error getting 'Target position' characteristic for motor %s. Window: %s", serviceNumber, window);
+            callback(new Error("Error getting 'Target position'."));
         }
     }
-    return positionState;
-};
 
-SmartWindowBoxAccessoryWrapper.prototype.onDeviceNameChange = function () {
-    this.accessory.getServiceByUUIDAndSubType(this.windowCoveringService, this.firstServiceSubtype)
-        .updateCharacteristic(this.nameCharacteristic, this.getServiceName(0));
-
-    this.accessory.getServiceByUUIDAndSubType(this.windowCoveringService, this.secondServiceSubtype)
-        .updateCharacteristic(this.nameCharacteristic, this.getServiceName(1));
-
-    this.accessory.getServiceByUUIDAndSubType(this.windowCoveringService, this.thirdServiceSubtype)
-        .updateCharacteristic(this.nameCharacteristic, this.getServiceName(2));
-};
-
-SmartWindowBoxAccessoryWrapper.prototype.getCurrentPosition = function (motorNumber, callback) {
-    this.log("SMARTWINDOWBOX ( %s ): Getting 'Current position' characteristic for motor %s ...", this.deviceName, motorNumber);
-    if (this.isResponding() && this.window) {
-        var currentPosition = this.getCurrentPositionValue(motorNumber);
-        this.log("SMARTWINDOWBOX ( %s ): Current 'Current position' characteristic for motor %s is %s", this.deviceName, motorNumber, currentPosition);
-
-        callback(null, currentPosition);
-    } else {
-        this.log("SMARTWINDOWBOX ( %s ): Error getting 'Current position' characteristic for motor %s. Window: %s", this.deviceName, motorNumber, this.window);
-        callback(new Error("Error getting 'Current position'."));
-    }
-};
-
-SmartWindowBoxAccessoryWrapper.prototype.getTargetPosition = function (motorNumber, callback) {
-    this.log("SMARTWINDOWBOX ( %s ): Getting 'Target position' characteristic for motor %s ...", this.deviceName, motorNumber);
-    if (this.isResponding() && this.window) {
-        var currentPosition = this.getTargetPositionValue(motorNumber);
-        this.log("SMARTWINDOWBOX ( %s ): Current 'Target position' characteristic for motor %s is %s", this.deviceName, motorNumber, currentPosition);
-
-        callback(null, currentPosition);
-    } else {
-        this.log("SMARTWINDOWBOX ( %s ): Error getting 'Target position' characteristic for motor %s. Window: %s", this.deviceName, motorNumber, this.window);
-        callback(new Error("Error getting 'Target position'."));
-    }
-};
-
-SmartWindowBoxAccessoryWrapper.prototype.setTargetPosition = function (motorNumber, position, callback) {
-    this.log("SMARTWINDOWBOX ( %s ): Setting 'target position' characteristic for motor %s to %s ...", this.deviceName, motorNumber, position);
-    position = 100 - position;
-    var self = this;
-    communication.send(bleboxCommands.setWindowPositionPercentage, this.deviceIp, {
-        params: [motorNumber, position],
-        onSuccess: function (windowState) {
-            if (windowState) {
-                self.window = windowState.window || windowState;
-                self.updateCharacteristics();
+    onSetTargetPosition(serviceNumber, position, callback) {
+        this.log("Setting 'target position' characteristic for motor %s to %s ...", serviceNumber, position);
+        position = 100 - position;
+        const self = this;
+        const device = this.getDevice();
+        communication.send(bleboxCommands.setWindowPositionPercentage, device.ip, {
+            params: [serviceNumber, position],
+            onSuccess: function (stateInfo) {
+                self.updateStateInfo(stateInfo);
                 callback(null); // success
-            } else {
+            },
+            onError: function () {
                 callback(new Error("Error setting 'target position'."));
             }
-        },
-        onError: function () {
-            callback(new Error("Error setting 'target position'."));
-        }
-    });
-};
-
-SmartWindowBoxAccessoryWrapper.prototype.getPositionState = function (motorNumber, callback) {
-    this.log("SMARTWINDOWBOX ( %s ): Getting 'Position state' characteristic for motor %s ...", this.deviceName, motorNumber);
-    if (this.isResponding() && this.window) {
-        var positionState = this.getPositionStateValue();
-        this.log("SMARTWINDOWBOX ( %s ): Current 'Position state' characteristic for motor %s is %s", this.deviceName, motorNumber, positionState);
-        callback(null, positionState); // success
-    } else {
-        this.log("SMARTWINDOWBOX ( %s ): Error getting 'Position state' characteristic for motor. Window: %s", this.deviceName, motorNumber, this.window);
-        callback(new Error("Error getting 'Position state'."));
+        });
     }
-};
 
+    onGetPositionState(serviceNumber, callback) {
+        this.log("Getting 'Position state' characteristic for motor %s ...", serviceNumber);
+        const window = this.getWindow();
+        if (this.isResponding() && window) {
+            const positionState = this.getPositionStateValue();
+            this.log("Current 'Position state' characteristic for motor %s is %s", serviceNumber, positionState);
+            callback(null, positionState); // success
+        } else {
+            this.log("Error getting 'Position state' characteristic for motor. Window: %s", serviceNumber, window);
+            callback(new Error("Error getting 'Position state'."));
+        }
+    }
+}
 
-SmartWindowBoxAccessoryWrapper.prototype.getName = function (motorNumber, callback) {
-    this.log("SMARTWINDOWBOX ( %s ): Getting 'name' characteristic ...", this.deviceName);
-    if (this.isResponding() && this.deviceName) {
-        var currentName = this.getServiceName(motorNumber);
-        this.log("SMARTWINDOWBOX ( %s ): Current 'name' characteristic is %s", this.deviceName, currentName);
-        callback(null, currentName);
-    } else {
-        this.log("SMARTWINDOWBOX ( %s ): Error getting 'name' characteristic. Name: %s", this.deviceName, this.deviceName);
-        callback(new Error("Error getting 'name'."));
+module.exports = {
+    type: SMARTWINDOWBOX_TYPE,
+    checkStateCommand: bleboxCommands.getWindowState,
+    create: function (accessory, log, api, deviceInfo, stateInfo) {
+        return new SmartWindowBoxAccessoryWrapper(accessory, log, api, deviceInfo, stateInfo);
+    }, restore: function (accessory, log, api) {
+        return new SmartWindowBoxAccessoryWrapper(accessory, log, api);
     }
 };
