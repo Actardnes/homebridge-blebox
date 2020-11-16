@@ -99,4 +99,9 @@ module.exports = {
         "method": "GET",
         "url": "/s/t/{0}"
     },
+    "getTempSensorState": {
+        "name": "getTempSensorState",
+        "method": "GET",
+        "url": "/api/tempsensor/state"
+    }
 };
