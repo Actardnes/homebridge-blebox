@@ -7,6 +7,8 @@ const switchBox = require("./switchBox");
 const switchBoxD = require("./switchBoxD");
 const wLightBox = require("./wLightBox");
 const wLightBoxS = require("./wLightBoxS");
+const tempSensor = require("./tempSensor");
+const airSensor = require("./airSensor");
 
 const wrappers = {};
 wrappers[dimmerBox.type] = dimmerBox;
@@ -18,5 +20,7 @@ wrappers[switchBox.type] = switchBox;
 wrappers[switchBoxD.type] = switchBoxD;
 wrappers[wLightBox.type] = wLightBox;
 wrappers[wLightBoxS.type] = wLightBoxS;
+wrappers[tempSensor.type] = tempSensor;
+wrappers[airSensor.type] = airSensor;
 
 module.exports = wrappers;
