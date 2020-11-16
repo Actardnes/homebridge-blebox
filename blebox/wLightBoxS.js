@@ -11,7 +11,7 @@ class WLightBoxSAccessoryWrapper extends AbstractBoxWrapper {
         this.type = WLIGHTBOXS_TYPE;
         this.checkStateCommand = bleboxCommands.Lightbulb;
 
-        this.servicesDefList = [api.hap.Service.Thermostat];
+        this.servicesDefList = [api.hap.Service.Lightbulb];
 
         this.nameCharacteristic = api.hap.Characteristic.Name;
         this.onCharacteristic = api.hap.Characteristic.On;
