@@ -9,6 +9,7 @@ module.exports= {
         WLIGHTBOXS : "wlightboxs",
         SMARTWINDOWBOX : "smartwindowbox",
         SAUNABOX : "saunabox",
-        TEMPSENSOR : "tempsensor"
+        TEMPSENSOR : "tempsensor",
+        AIRSENSOR : "airsensor"
     }
 };
