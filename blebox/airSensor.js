@@ -49,7 +49,7 @@ class AirSensorAccessoryWrapper extends AbstractBoxWrapper {
             //update characteristics
             const serviceNumber = 0;
             const service = this.getService(serviceNumber);
-            service.updateCharacteristic(this.currentTemperatureCharacteristic, this.getCurrentAirQualityValue());
+            service.updateCharacteristic(this.airQualityCharacteristic, this.getCurrentAirQualityValue());
             service.updateCharacteristic(this.pm2_5DensityCharacteristic, this.getPmDensityValue(PM_TYPES.PM2_5));
             service.updateCharacteristic(this.pm10DensityCharacteristic, this.getPmDensityValue(PM_TYPES.PM10));
         }
