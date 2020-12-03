@@ -48,7 +48,7 @@ class GateBoxAccessoryWrapper extends AbstractBoxWrapper {
             const service = this.getService(serviceNumber);
             service.updateCharacteristic(this.currentDoorStateCharacteristic, this.getCurrentDoorStateValue());
 
-            service.updateCharacteristic(this.targetDoorStateCharacteristic, this.getTargetDoorStateValue());
+            service.updateCharacteristic(this.targetDoorStateCharacteristic, this.getCurrentDoorStateValue());
         }
     };
 
@@ -75,18 +75,6 @@ class GateBoxAccessoryWrapper extends AbstractBoxWrapper {
         return state;
     };
 
-    getTargetDoorStateValue() {
-        let state = this.targetDoorStateCharacteristic.OPEN;
-        const gate = this.getGate();
-        if (gate) {
-            const currentPosition = Number(gate.desiredPos) || 0;
-            if (currentPosition === 0) {
-                state = this.targetDoorStateCharacteristic.CLOSED;
-            }
-        }
-        return state;
-    };
-
     onGetCurrentDoorState(callback) {
         this.log("Getting 'current door' characteristic ...");
         const gate = this.getGate();
@@ -104,7 +92,7 @@ class GateBoxAccessoryWrapper extends AbstractBoxWrapper {
         this.log("Getting 'target door' characteristic ...");
         const gate = this.getGate();
         if (this.isResponding() && gate) {
-            const targetState = this.getTargetDoorStateValue();
+            const targetState = this.getCurrentDoorStateValue();
             this.log("Current 'target door' characteristic is %s", targetState);
             callback(null, targetState);
         } else {
