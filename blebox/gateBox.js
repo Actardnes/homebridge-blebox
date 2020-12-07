@@ -47,8 +47,6 @@ class GateBoxAccessoryWrapper extends AbstractBoxWrapper {
             const serviceNumber = 0;
             const service = this.getService(serviceNumber);
             service.updateCharacteristic(this.currentDoorStateCharacteristic, this.getCurrentDoorStateValue());
-
-            service.updateCharacteristic(this.targetDoorStateCharacteristic, this.getCurrentDoorStateValue());
         }
     };
 
