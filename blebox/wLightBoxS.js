@@ -9,7 +9,7 @@ class WLightBoxSAccessoryWrapper extends AbstractBoxWrapper {
         super(accessory, log, api);
 
         this.type = WLIGHTBOXS_TYPE;
-        this.checkStateCommand = bleboxCommands.Lightbulb;
+        this.checkStateCommand = bleboxCommands.getLightState;
 
         this.servicesDefList = [api.hap.Service.Lightbulb];
 
