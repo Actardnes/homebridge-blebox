@@ -1,6 +1,6 @@
 {
   "name": "homebridge-blebox",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "BleBox plugin for homebridge: https://github.com/nfarina/homebridge",
   "main": "index.js",
   "repository": {
