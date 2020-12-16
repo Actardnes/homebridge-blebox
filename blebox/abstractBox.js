@@ -97,6 +97,10 @@ class AbstractAccessoryWrapper {
             if (!device.ip && deviceInfo.network) {
                 device.ip = deviceInfo.network.ip;
             }
+            if (!device.ip) {
+                const currentDevice = this.getDevice();
+                device.ip = currentDevice.ip;
+            }
             device.deviceName = device.deviceName ? device.deviceName.replace(NON_ALPHANUMERIC_REGEX, ' ') : "";
             return device;
         }
@@ -106,9 +110,11 @@ class AbstractAccessoryWrapper {
         const newDevice = this.parseDeviceInfo(deviceInfo);
         if (newDevice) {
             const device = this.getDevice();
-            this.accessory.context.blebox.device = newDevice;
-            if (device && device.deviceName !== newDevice.deviceName) {
-                this.updateDeviceInfoCharacteristics();
+            if(device.id === newDevice.id) {
+                this.accessory.context.blebox.device = newDevice;
+                if (device && device.deviceName !== newDevice.deviceName) {
+                    this.updateDeviceInfoCharacteristics();
+                }
             }
         }
     };
@@ -130,17 +136,8 @@ class AbstractAccessoryWrapper {
         const self = this;
         communication.send(bleboxCommands.getDeviceState, device.ip, {
             onSuccess: function (deviceInfo) {
-                const newDevice = self.parseDeviceInfo(deviceInfo)
-                if (newDevice) {
-                    if (device.id === newDevice.id) {
-                        self.badRequestsCounter = 0;
-                        self.updateDeviceInfo(deviceInfo);
-                    }
-                    // else {
-                    //     self.badRequestsCounter = maxBadRequestsCount + 1;
-                    //     self.stopListening();
-                    // }
-                }
+                self.updateDeviceInfo(deviceInfo);
+                self.badRequestsCounter = 0;
             }, onError: function () {
                 self.badRequestsCounter++;
             }
