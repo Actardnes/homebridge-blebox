@@ -99,7 +99,7 @@ class AbstractAccessoryWrapper {
             }
             if (!device.ip) {
                 const currentDevice = this.getDevice();
-                device.ip = currentDevice.ip;
+                device.ip = currentDevice && currentDevice.ip;
             }
             device.deviceName = device.deviceName ? device.deviceName.replace(NON_ALPHANUMERIC_REGEX, ' ') : "";
             return device;
@@ -110,7 +110,7 @@ class AbstractAccessoryWrapper {
         const newDevice = this.parseDeviceInfo(deviceInfo);
         if (newDevice) {
             const device = this.getDevice();
-            if(device.id === newDevice.id) {
+            if (!device || device.id === newDevice.id) {
                 this.accessory.context.blebox.device = newDevice;
                 if (device && device.deviceName !== newDevice.deviceName) {
                     this.updateDeviceInfoCharacteristics();
