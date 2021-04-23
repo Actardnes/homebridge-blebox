@@ -6,6 +6,7 @@ module.exports= {
         SHUTTERBOX : "shutterbox",
         DIMMERBOX : "dimmerbox",
         WLIGHTBOX : "wlightbox",
+        WLIGHTBOX_SINGLE_CHANNEL : "wlightboxSingleChannel",
         WLIGHTBOXS : "wlightboxs",
         SMARTWINDOWBOX : "smartwindowbox",
         SAUNABOX : "saunabox",

@@ -1,7 +1,7 @@
 var os = require('os');
 var communication = require("./../common/communication");
 var bleboxCommands = require("./../common/bleboxCommands");
-var bleBoxAccessoryWrapperFactories = require("./../blebox")
+var getBleBoxAccessoryWrapperFactories = require("./../blebox")
 
 class BleBoxPlatform {
     constructor(homebridge, log, config, api) {
@@ -24,12 +24,13 @@ class BleBoxPlatform {
 
     // Implement for DynamicPlatformPlugin
     configureAccessory(accessory) {
-        const deviceType = accessory.context.blebox.device.type || accessory.context.blebox.type || "";
-        const accessoryWrapperFactory = bleBoxAccessoryWrapperFactories[deviceType.toLowerCase()];
+        const bleboxContext = accessory.context.blebox;
+        const deviceType = bleboxContext.device.type || bleboxContext.type || "";
+        const accessoryWrapperFactory = getBleBoxAccessoryWrapperFactories(deviceType.toLowerCase(), bleboxContext);
         if (accessoryWrapperFactory) {
             const accessoryWrapper = accessoryWrapperFactory.restore(accessory, this.log, this.api);
             this.addAccessoryWrapper(accessoryWrapper, false);
-        }else{
+        } else {
             this.log(JSON.stringify(accessory.context))
             this.api.unregisterPlatformAccessories("homebridge-blebox", "BleBoxPlatform", [accessory]);
         }
@@ -167,10 +168,12 @@ class BleBoxPlatform {
         var ipAddress = deviceInfo.ip;
         var self = this;
         var deviceType = deviceInfo.type.toLowerCase();
-        var accessoryWrapperFactory = bleBoxAccessoryWrapperFactories[deviceType];
+        let accessoryWrapperFactory = getBleBoxAccessoryWrapperFactories(deviceType);
         if (accessoryWrapperFactory) {
             communication.send(accessoryWrapperFactory.checkStateCommand, ipAddress, {
                 onSuccess: function (stateInfo) {
+                    // when we have state info we should check if we should use different wrapper (e.g. for wlightbox we could use single channel variant)
+                    accessoryWrapperFactory = getBleBoxAccessoryWrapperFactories(deviceType, stateInfo);
                     self.createAndAddAccessoryWrapper(accessoryWrapperFactory, deviceInfo, stateInfo);
                 }
             })
