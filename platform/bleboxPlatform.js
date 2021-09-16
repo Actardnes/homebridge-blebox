@@ -26,7 +26,7 @@ class BleBoxPlatform {
     configureAccessory(accessory) {
         const bleboxContext = accessory.context.blebox;
         const deviceType = bleboxContext.device.type || bleboxContext.type || "";
-        const accessoryWrapperFactory = getBleBoxAccessoryWrapperFactories(deviceType.toLowerCase(), bleboxContext);
+        const accessoryWrapperFactory = getBleBoxAccessoryWrapperFactories(deviceType.toLowerCase(), bleboxContext, accessory.services);
         if (accessoryWrapperFactory) {
             const accessoryWrapper = accessoryWrapperFactory.restore(accessory, this.log, this.api);
             this.addAccessoryWrapper(accessoryWrapper, false);
