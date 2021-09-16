@@ -2,6 +2,7 @@ const communication = require("../common/communication");
 const bleboxCommands = require("../common/bleboxCommands");
 const DIMMERBOX_TYPE = require("../common/bleboxConst").BLEBOX_TYPE.DIMMERBOX;
 const AbstractBoxWrapper = require("./abstractBox");
+const colorHelper = require("../common/colorHelper");
 
 class DimmerBoxAccessoryWrapper extends AbstractBoxWrapper {
     constructor(accessory, log, api, deviceInfo, stateInfo) {
@@ -116,7 +117,7 @@ class DimmerBoxAccessoryWrapper extends AbstractBoxWrapper {
         const device = this.getDevice();
         const self = this;
         communication.send(bleboxCommands.setSimpleDimmerState, device.ip, {
-            params: [brightness.toString(16)],
+            params: [colorHelper.toHex(brightness)],
             onSuccess: function (stateInfo) {
                 self.updateStateInfo(stateInfo);
                 callback(null);
