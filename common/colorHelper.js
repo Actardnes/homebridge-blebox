@@ -1,3 +1,5 @@
+const _ = require("lodash");
+
 module.exports = {
     rgbToHsv: function (rgb) {
         var rr, gg, bb,
@@ -117,7 +119,7 @@ module.exports = {
 
 
     toHex: function (d) {
-        return ("0" + (Number(Number(d).toFixed(0)).toString(16))).slice(-2).toUpperCase();
+        return _.padStart((_.clamp(_.round(d), 0,255)||0).toString(16),2,'0').toUpperCase();
     },
 
     rgbToHex: function (rgb) {
