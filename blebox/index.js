@@ -35,11 +35,11 @@ const wrappersByType = _.reduce(wrappers, (acc, wrapper) => {
     return acc;
 }, {})
 
-const getWrapper = (type, state, services) => {
+const getWrapper = (type, state={}, services) => {
     if (type === wLightBox.type) {
         // when wlightboxs will change into wlightbox we need to check state with a little weird path: `light.rgbw.currentColor`
         const currentColorFallback = _.get(state,'light.rgbw.currentColor','');
-        const {rgbw: {currentColor = currentColorFallback} = state} = state || {};
+        const {rgbw: {currentColor = currentColorFallback} = state} = state;
         const channelsCount = currentColor.length / 2;
         // wLightBox: 3 services
         // wLightBox_singleChannel: 2 services
