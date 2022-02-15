@@ -15,7 +15,12 @@ class BleBoxPlatform {
         this.homebridge = homebridge;
         this.api = api;
 
-        this.prepareIpListToScan();
+        if (this.config["IP_LIST"]) {
+            this.log("IP_LIST is defined, will use it instead of local subnet");
+            this.ipList = this.config["IP_LIST"]
+        } else {
+            this.prepareIpListToScan();
+        }
 
         this.api.on('didFinishLaunching', function () {
             this.startSearching();
